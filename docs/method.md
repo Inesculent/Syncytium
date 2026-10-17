@@ -75,7 +75,8 @@ Bits per weight for a child are *b* + 32/*g* when *m* and Δ are stored as fp16 
 | 3   | 64  | 3.5             | 4.6x              |
 | 2   | 64  | 2.5             | 6.4x              |
 
-Reported numbers always include unquantized tensors, measured from the files on disk.
+Reported numbers always include unquantized tensors (kept in bf16). Phase 1 computes them from
+parameter counts; phase 2 also measures the shard files on disk.
 
 ## System design (container demo)
 
