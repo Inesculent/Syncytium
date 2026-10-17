@@ -30,6 +30,7 @@ def handmade(tmp_path):
         row("child", 12.0, (0,)),
         row("child", 14.0, (1,)),
         row("rebuild", 10.3, (0, 1)),
+        row("partial", 14.0, (1,)),
         row("child", 30.0, (0,), num_children=4),
         row("rebuild", 11.0, (0, 1, 2, 3), num_children=4),
         row("partial", 31.0, (0, 1, 2), num_children=4),
@@ -53,10 +54,13 @@ def test_summary_statistics(handmade):
 
 def test_hypothesis_checks(handmade):
     summary = summarize(handmade).set_index("num_children")
+    assert summary.loc[2, "child_ratio"] == pytest.approx(1.4)
+    assert summary.loc[2, "h2"]
+    assert not summary.loc[4, "h2"]  # the worst child is 3x bf16
     assert summary.loc[2, "h3"]
     assert not summary.loc[4, "h3"]
     assert not summary.loc[4, "h4"]  # a partial rebuild worse than the best child
-    assert pd.isna(summary.loc[2, "h4"])  # no partial rebuilds were logged for N = 2
+    assert pd.isna(summary.loc[2, "h4"])  # with N = 2 the partial rebuild is one child
 
 
 def test_markdown_states_the_bf16_reference(handmade):

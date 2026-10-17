@@ -57,6 +57,7 @@ dev = [
 syncytium-sweep = "syncytium.sweep.cli:main"
 syncytium-report = "syncytium.report.cli:main"
 syncytium-shard = "syncytium.shards.cli:main"
+syncytium-pool = "syncytium.pool.cli:main"
 
 [tool.hatch.version]
 path = "src/syncytium/__init__.py"

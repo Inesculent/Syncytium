@@ -6,6 +6,7 @@ import torch
 from syncytium.quant import (
     child_weights,
     fit_grid,
+    mean_weights,
     normalize,
     parent_codes,
     parent_weights,
@@ -89,9 +90,37 @@ def test_partial_rebuild_from_one_child_equals_that_child(groups):
     assert torch.allclose(partial, child_weights(children[3], grid, index=3, num_children=4))
 
 
+@pytest.mark.parametrize("num_children", CHILDREN)
+@pytest.mark.parametrize("phase", PHASES)
+def test_mean_of_every_child_equals_parent(groups, num_children, phase):
+    grid = fit_grid(groups, 4)
+    children = quantize_children(groups, grid, num_children, phase)
+    mean = mean_weights(dict(enumerate(children)), grid, num_children, phase)
+    parent = parent_weights(parent_codes(children), grid, num_children, phase)
+    assert torch.allclose(mean, parent)
+
+
+def test_mean_of_one_child_equals_that_child(groups):
+    grid = fit_grid(groups, 4)
+    children = quantize_children(groups, grid, num_children=4, phase=0.5)
+    mean = mean_weights({2: children[2]}, grid, num_children=4, phase=0.5)
+    expected = child_weights(children[2], grid, index=2, num_children=4, phase=0.5)
+    assert torch.allclose(mean, expected)
+
+
+def test_mean_of_a_subset_averages_its_children(groups):
+    grid = fit_grid(groups, 3)
+    children = quantize_children(groups, grid, num_children=4)
+    mean = mean_weights({0: children[0], 3: children[3]}, grid, num_children=4)
+    expected = (child_weights(children[0], grid, 0, 4) + child_weights(children[3], grid, 3, 4)) / 2
+    assert torch.allclose(mean, expected)
+
+
 def test_rebuild_requires_at_least_one_child(groups):
     grid = fit_grid(groups, 4)
     with pytest.raises(ValueError, match="at least one child"):
         parent_codes([])
     with pytest.raises(ValueError, match="at least one child"):
         partial_weights({}, grid, num_children=4)
+    with pytest.raises(ValueError, match="at least one child"):
+        mean_weights({}, grid, num_children=4)

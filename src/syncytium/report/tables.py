@@ -1,8 +1,9 @@
 """Turning a sweep's results log into a summary table per setting.
 
 Each row of the summary is one setting (bits, group size, phase, rotation, N) and answers
-the hypotheses directly: how good the children are alone, how close the full rebuild comes
-to bf16 (H3) and whether losing one child still beats any single child (H4).
+the hypotheses directly: whether every child is usable alone (H2), how close the full rebuild
+comes to bf16 (H3) and whether losing one child still beats any single child (H4). The
+thresholds are the ones fixed in docs/hypothesis.md after the 0.8B pilot.
 """
 
 import json
@@ -12,6 +13,7 @@ import pandas as pd
 
 SETTING = ["bits", "group_size", "phase", "rotation", "num_children"]
 KINDS = ("child", "rebuild", "partial")
+H2_MAX_RATIO = 1.5
 H3_MAX_GAP = 0.5
 
 
@@ -53,11 +55,16 @@ def summarize(results: pd.DataFrame) -> pd.DataFrame:
 
 
 def _add_hypothesis_checks(summary: pd.DataFrame, bf16: float) -> pd.DataFrame:
+    # An outage does not choose which children survive, so H2 judges the worst one.
+    summary["child_ratio"] = summary["child_worst"] / bf16
     summary["rebuild_gap"] = summary["rebuild"] - bf16
+    summary["h2"] = summary["child_ratio"] <= H2_MAX_RATIO
     summary["h3"] = summary["rebuild_gap"] <= H3_MAX_GAP
-    # H4 needs a partial rebuild; settings without one get <NA> rather than False.
+    # H4 needs a partial rebuild of at least two children; with N = 2 the "partial" is a
+    # single child, so those settings get <NA> rather than False.
     beats_best_child = (summary["partial_worst"] < summary["child_best"]).astype("boolean")
-    summary["h4"] = beats_best_child.where(summary["partial_worst"].notna())
+    testable = summary["partial_worst"].notna() & (summary["num_children"] > 2)
+    summary["h4"] = beats_best_child.where(testable)
     return summary
 
 

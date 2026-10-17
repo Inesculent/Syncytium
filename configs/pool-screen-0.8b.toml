@@ -1,0 +1,20 @@
+# Quick end-to-end check of the pooled-pipeline sweep: 2 stages, 8 windows (a few minutes).
+name = "pool-screen-0.8b"
+output = "results/pool-screen-0.8b"
+
+[model]
+path = "Qwen/Qwen3.5-0.8B-Base"
+
+[eval]
+window = 2048
+max_windows = 8
+
+[pool]
+bits = 4
+group_size = 64
+children = 4
+stages = 2
+phase = 0.5
+rotation = true
+max_lost = 3
+samples = 2

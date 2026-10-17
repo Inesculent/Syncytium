@@ -13,6 +13,7 @@ own. Decisions taken while planning are recorded at the end.
 | 1.4 Sweep runner | TOML configs; resumable JSONL results with config, seed, versions and commit. Offsets for *N* = 2 and 4 are subsets of *N* = 8, so only 8 distinct children are evaluated per setting. Includes an offset-phase ablation, *k*/*N* versus (*k* + ½)/*N* (see below). | `scripts/`, `configs/` |
 | 1.5 Shared rotation | Block-diagonal randomized Hadamard transform with block size equal to the group size. Test that the rebuild identity still holds. | `src/syncytium/quant/` |
 | 1.6 Pilot and sweep | Report module (summary table with H3/H4 checks, recovery, Pareto and offset figures) and SLURM scripts. 0.8B pilot; fix the usable-child threshold in the hypothesis document; run 2B (locally or on the cluster), and 4B and 9B on the cluster (4B's bf16 weights alone exceed a 10 GB GPU); write-up. | `src/syncytium/report/`, `slurm/`, `docs/results/` |
+| 1.7 Pooled pipeline | Stages of the parent held by *N* devices with one child each; a stage averages its live devices' outputs, which with all alive equals the parent exactly. `syncytium-pool` evaluates every single-device loss, every stage on one child, and random loss patterns with their per-stage components, under the mean and midpoint estimators; the summary checks H6b and H6c. Run at 0.8B, then 2B. | `src/syncytium/pool/`, `configs/pool-*.toml` |
 
 ## Phase 2: Container demo
 
@@ -24,6 +25,7 @@ own. Decisions taken while planning are recorded at the end.
 | 2.4 Docker | Child image (llama.cpp server plus harness), main image (CUDA), compose file, demo script for kill, wipe, restart and rebuild. |
 | 2.5 Demo run | Event timeline and outputs before, during and after the outage. |
 | 2.6 Agent layer | A LangGraph agent works on multi-step tasks through a router node that sends each call to the main model when healthy, to the best available child or partial rebuild during an outage, and back after the rebuild. Measures task success and step quality before, during and after a failure. |
+| 2.7 Pooled containers | The pooled pipeline of stage 1.7 as containers: one PyTorch CPU worker per (stage, child) device, each with a memory limit below what the whole model needs, on a local Docker network with no internet access. A stage averages its live workers' outputs; activations pass between stages. Membership comes from an operator-written roster; workers never discover or add devices, and the signed revoke from 2.3 stops every worker. Demo: kill workers one at a time, then whole sets, and record generation quality, tokens per second and bytes moved; check that outputs match the stage 1.7 simulation for the same device states. |
 
 ## Phase 3: Cluster
 
@@ -68,7 +70,7 @@ candidate follow-up.
 |----------|--------|
 | Array library | PyTorch is a core dependency; CI installs the CPU wheel. |
 | Group sizes | Sweep 32, 64 and 128; the demo uses 32 to match Q4_1 blocks (5 bits per weight at 4 bits, a 3.2x reduction). |
-| Thresholds | Set after the 0.8B pilot and before the full sweep. |
+| Thresholds | Set after the 0.8B pilot and before the full sweep: H2 needs the worst child within 1.5x of bf16 perplexity; H3 stays at 0.5; H4 applies for *N* ≥ 3 (see [hypothesis](hypothesis.md#what-results-would-mean)). |
 | Quantizer baselines | GPTQ/AWQ deferred to phase 3. |
 | Control plane versus agent layer | Leader election, rebuild decisions and verification are deterministic code with no model in the loop: they need guarantees, must be testable, and keep the operator's revoke authoritative. LangGraph appears only in the agent layer (2.6), where it chooses which model answers a request using health reported by the control plane; it never decides whether to rebuild or which nodes exist. |
 | MoE expert splitting | Not pursued now: well covered by expert-pruning work and cluster-only. Kept as a phase 3 extension combined with staggered precision. |

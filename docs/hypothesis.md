@@ -52,6 +52,22 @@ destroyed and its filesystem wiped:
 - the main container, once restarted, is rebuilt from the children alone, with a hash match,
   even though no surviving node holds parent-precision weights.
 
+**H6. Pooled pipeline.** Split the parent into stages, each held by *N* devices that store one
+child of that stage (see [method](method.md#pooled-pipeline)). Then:
+- **H6a. Exact pooling.** Averaging the outputs of a stage's *N* devices reproduces the
+  rebuilt parent exactly. *This follows from the parent being the mean of its children; the
+  tests check the implementation.*
+- **H6b. One failure is nearly invisible.** Losing any one device, with the stage averaging
+  its survivors, keeps perplexity within **0.5** of bf16 (H3's bar).
+- **H6c. Predictable degradation.** The log-perplexity increase of a random loss pattern is
+  predicted by adding the increases of each affected stage measured on its own, with
+  **R² ≥ 0.9** across patterns.
+
+*Proposed on 2026-10-17, before any pooled sweep beyond a pipeline check (`pool-screen-0.8b`)
+ran. The thresholds are not fixed until confirmed here.* Which stage is most sensitive, and how
+much the mean estimator loses against the interval midpoint, are exploratory questions with no
+threshold.
+
 ## Goals
 
 - An open-source reference implementation that is small, tested and easy to read.
@@ -108,8 +124,15 @@ used because perplexity is the primary metric.
 | H2 fails at 4 bits for models of 2B and up               | Children are not useful alone; the scheme reduces to coded storage. |
 | H4 fails (one missing child is worse than one child)     | Decoding of partial sets needs rethinking.       |
 
-Numeric thresholds for "usable" in H2 will be fixed after the 0.8B pilot and before the full
-sweep. Any later change is recorded here with its reason.
+**Thresholds, fixed on 2026-10-17 after the 0.8B pilot and before any 2B, 4B or 9B result was
+examined.** A setting passes H2 when its *worst* child has a WikiText-2 perplexity at most
+**1.5x** that of the bf16 parent. The worst child is used because an outage does not choose
+which children survive; a ratio is used so the bar means the same at every model size. In the
+pilot the worst child of each setting scored 1.12–1.17x at 4 bits, 1.97–2.70x at 3 bits (the
+lower end with rotation) and over 2000x at 2 bits. The threshold therefore separates 4 from
+3 bits at 0.8B and leaves 3-bit children with rotation as an open question for the larger
+models. H4 is evaluated only for *N* ≥ 3, since with *N* = 2 any *N* − 1 children are a
+single child. Any later change is recorded here with its reason.
 
 ## Origin of the hypothesis
 

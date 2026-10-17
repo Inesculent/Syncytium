@@ -12,7 +12,13 @@ import torch
 from torch import Tensor
 
 from syncytium.quant.grid import fit_grid, from_groups, normalize, to_groups
-from syncytium.quant.rebuild import parent_codes, parent_weights, partial_weights
+from syncytium.quant.rebuild import (
+    Estimator,
+    mean_weights,
+    parent_codes,
+    parent_weights,
+    partial_weights,
+)
 from syncytium.quant.rotation import random_rotation
 from syncytium.quant.scheme import Scheme
 from syncytium.quant.stagger import child_codes, child_weights
@@ -33,14 +39,20 @@ def simulate_child(weight: Tensor, scheme: Scheme, index: int) -> Tensor:
     return _map_groups(weight, scheme, quantize)
 
 
-def simulate_rebuild(weight: Tensor, scheme: Scheme, indices: Collection[int]) -> Tensor:
+def simulate_rebuild(
+    weight: Tensor,
+    scheme: Scheme,
+    indices: Collection[int],
+    estimator: Estimator = Estimator.MIDPOINT,
+) -> Tensor:
     """Weights rebuilt from the children in ``indices``.
 
-    With every child present this is the exact integer rebuild; with a subset it is the
-    partial rebuild by interval intersection.
+    With every child present this is the exact integer rebuild; with a subset, ``estimator``
+    chooses between the partial rebuild by interval intersection and the children's mean.
     """
     available = sorted(set(indices))
     n, phase = scheme.num_children, scheme.phase
+    partial = mean_weights if estimator == Estimator.MEAN else partial_weights
 
     def rebuild(groups: Tensor) -> Tensor:
         grid = fit_grid(groups, scheme.bits)
@@ -48,7 +60,7 @@ def simulate_rebuild(weight: Tensor, scheme: Scheme, indices: Collection[int]) -
         codes = {k: child_codes(x, grid, k, n, phase) for k in available}
         if len(codes) == n:
             return parent_weights(parent_codes(list(codes.values())), grid, n, phase)
-        return partial_weights(codes, grid, n, phase)
+        return partial(codes, grid, n, phase)
 
     return _map_groups(weight, scheme, rebuild)
 

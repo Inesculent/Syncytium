@@ -86,7 +86,12 @@ def offsets_figure(results: pd.DataFrame) -> Figure:
 def _recovery_panel(axis: Axes, data: pd.DataFrame, bf16: float) -> None:
     for slot, (n, rows) in enumerate(data.groupby("num_children")):
         curve = rows.groupby("present")["perplexity"].mean()
-        axis.plot(curve.index, curve.values, **_mark(slot), label=f"N = {n}")
+        # Sweeps measure one child and N - max_missing ... N children; a dotted segment
+        # bridges the counts in between, which were not measured.
+        for start, end in zip(curve.index[:-1], curve.index[1:], strict=True):
+            segment = curve.loc[[start, end]]
+            linestyle = "-" if end - start == 1 else ":"
+            axis.plot(segment.index, segment.values, **_mark(slot, linestyle))
         axis.annotate(
             f"N = {n}",
             (curve.index[-1], curve.values[-1]),

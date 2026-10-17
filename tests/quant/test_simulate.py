@@ -2,6 +2,7 @@ import pytest
 import torch
 
 from syncytium.quant import (
+    Estimator,
     Scheme,
     child_weights,
     fit_grid,
@@ -48,6 +49,25 @@ def test_missing_child_lowers_precision(weight):
     full = simulate_rebuild(weight, SCHEME, indices=range(4))
     partial = simulate_rebuild(weight, SCHEME, indices=[0, 1, 3])
     assert (partial - weight).abs().mean() > (full - weight).abs().mean()
+
+
+@pytest.mark.parametrize("rotation_seed", [None, 0])
+@pytest.mark.parametrize("indices", [range(4), [0, 1, 3], [2]])
+def test_mean_estimator_equals_averaging_child_outputs(weight, rotation_seed, indices):
+    # What devices holding one child each compute when they average their layer outputs.
+    scheme = Scheme(bits=3, group_size=64, num_children=4, phase=0.5, rotation_seed=rotation_seed)
+    inputs = torch.randn(512, 8, generator=torch.Generator().manual_seed(1), dtype=torch.float64)
+    averaged = torch.stack([simulate_child(weight, scheme, k) @ inputs for k in indices]).mean(0)
+    pooled = simulate_rebuild(weight, scheme, indices, Estimator.MEAN) @ inputs
+    assert torch.allclose(pooled, averaged)
+
+
+def test_midpoint_and_mean_differ_only_with_some_children_missing(weight):
+    for indices in (range(4), [1]):
+        midpoint = simulate_rebuild(weight, SCHEME, indices, Estimator.MIDPOINT)
+        assert torch.allclose(simulate_rebuild(weight, SCHEME, indices, Estimator.MEAN), midpoint)
+    midpoint = simulate_rebuild(weight, SCHEME, [0, 1, 3], Estimator.MIDPOINT)
+    assert not torch.allclose(simulate_rebuild(weight, SCHEME, [0, 1, 3], Estimator.MEAN), midpoint)
 
 
 def test_chunking_does_not_change_results(weight, monkeypatch):

@@ -46,7 +46,12 @@ def test_rejects_empty_lists(tmp_path):
         load_config(write(tmp_path, MINIMAL.replace("bits = [4]", "bits = []")))
 
 
-@pytest.mark.parametrize("path", sorted(Path("configs").glob("*.toml")), ids=lambda p: p.stem)
+SWEEP_CONFIGS = [
+    p for p in sorted(Path("configs").glob("*.toml")) if not p.stem.startswith("pool-")
+]
+
+
+@pytest.mark.parametrize("path", SWEEP_CONFIGS, ids=lambda p: p.stem)
 def test_repository_configs_are_valid(path):
     config = load_config(path)
     assert config.name == path.stem

@@ -32,6 +32,13 @@ def test_conditions_do_not_compound(tiny_model):
     assert torch.allclose(weights[name], before[name] + 1)
 
 
+def test_apply_named_passes_each_weight_name(tiny_model):
+    weights = quantized_weights(tiny_model)
+    seen = []
+    WeightBank(weights).apply_named(lambda name, w: seen.append(name) or w)
+    assert seen == list(weights)
+
+
 def test_restore_returns_original_weights(tiny_model):
     bank = WeightBank(quantized_weights(tiny_model))
     before = snapshot(tiny_model)

@@ -6,6 +6,7 @@ import torch
 from torch import Tensor, nn
 
 Transform = Callable[[Tensor], Tensor]
+NamedTransform = Callable[[str, Tensor], Tensor]
 
 
 class WeightBank:
@@ -24,12 +25,16 @@ class WeightBank:
         self._weights = dict(weights)
         self._originals = {name: w.detach().to("cpu", copy=True) for name, w in weights.items()}
 
-    @torch.no_grad()
     def apply(self, transform: Transform) -> None:
         """Replace every weight with ``transform`` of its original value."""
+        self.apply_named(lambda _, weight: transform(weight))
+
+    @torch.no_grad()
+    def apply_named(self, transform: NamedTransform) -> None:
+        """Like :meth:`apply`, with each weight's name passed to ``transform`` first."""
         for name, weight in self._weights.items():
             original = self._originals[name].to(weight.device, torch.float32)
-            weight.copy_(transform(original))
+            weight.copy_(transform(name, original))
 
     @torch.no_grad()
     def restore(self) -> None:

@@ -1,12 +1,20 @@
 """Rebuilding the parent from children (``docs/method.md``, "Rebuild" and "Partial rebuild")."""
 
 from collections.abc import Mapping, Sequence
+from enum import StrEnum
 
 import torch
 from torch import Tensor
 
 from syncytium.quant.grid import Grid
-from syncytium.quant.stagger import offset
+from syncytium.quant.stagger import child_weights, offset
+
+
+class Estimator(StrEnum):
+    """How weights are estimated from a strict subset of the children."""
+
+    MIDPOINT = "midpoint"  # partial_weights: midpoint of the intersected intervals
+    MEAN = "mean"  # mean_weights: average of the surviving children
 
 
 def parent_codes(children: Sequence[Tensor]) -> Tensor:
@@ -54,3 +62,30 @@ def partial_weights(
     )
     midpoint = (starts.amax(dim=0) + starts.amin(dim=0) + 1) / 2
     return grid.minimum + grid.step * midpoint
+
+
+def mean_weights(
+    available: Mapping[int, Tensor], grid: Grid, num_children: int, phase: float = 0.0
+) -> Tensor:
+    """Average the dequantized weights of any subset of children.
+
+    The average is linear in the children, so devices that each hold one child can apply it
+    by averaging their layer outputs, without ever assembling the weights. With every child
+    present it equals the parent exactly; with one child it is that child. With some
+    children missing it is slightly less accurate than :func:`partial_weights`.
+
+    Args:
+        available: Codes of the surviving children, keyed by child index k.
+        grid: The shared grid.
+        num_children: Number of children N in the original set.
+        phase: Offset phase φ.
+
+    Raises:
+        ValueError: If ``available`` is empty.
+    """
+    if not available:
+        raise ValueError("at least one child is required")
+    weights = [
+        child_weights(codes, grid, index, num_children, phase) for index, codes in available.items()
+    ]
+    return torch.stack(weights).mean(dim=0)

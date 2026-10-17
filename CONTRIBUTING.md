@@ -45,7 +45,7 @@ The code accompanies a paper, so readers should be able to check it against the
 Current:
 
 ```
-configs/                sweep configs (TOML)
+configs/                sweep and pooled-pipeline configs (TOML)
 docs/                   hypothesis, method, plan, cluster guide and future work
 docs/results/           summary tables and figures written by syncytium-report
 slurm/                  cluster setup, job script and submission helper
@@ -55,6 +55,7 @@ src/syncytium/eval/     corpus, perplexity and memory accounting
 src/syncytium/sweep/    sweep configs, conditions, results log, runner and CLI
 src/syncytium/report/   summary tables (with hypothesis checks) and paper figures
 src/syncytium/shards/   bit packing, shard files, manifests, verification and rebuild
+src/syncytium/pool/     pooled pipeline: stage layout, device-loss states, runner, summary
 tests/                  unit tests, mirroring the package layout
 ```
 

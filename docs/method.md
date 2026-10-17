@@ -103,6 +103,33 @@ Bits per weight for a child are *b* + 32/*g* when *m* and Δ are stored as fp16 
 Reported numbers always include unquantized tensors (kept in bf16). Phase 1 computes them from
 parameter counts; phase 2 also measures the shard files on disk.
 
+## Pooled pipeline
+
+Devices too small to hold the model can still serve it together. The parent is split into
+stages: stage 0 holds the embedding (tied to the output head), and stages 1 … *S* hold
+contiguous blocks of decoder layers. Each stage is held by *N* devices, and device (*s*, *k*)
+stores only child *k* of stage *s*, so it needs about 1/(*S* + 1) of one child's memory.
+
+Because the parent's weights are exactly the mean of the children's weights (see "Rebuild"),
+and every linear layer is linear in its weights,
+
+  *Ŵ x* = (1/*N*) Σₖ *Ŵ*ₖ *x*.
+
+Each device multiplies the stage's input by its own child, and the stage averages the
+devices' outputs. With every device alive this is exactly the rebuilt parent, although no
+device ever holds more than one child. Activations pass between stages as in any pipeline.
+
+When devices fail, a stage averages its surviving devices instead (the *mean* estimator).
+This is the only estimator the devices can compute without gathering each other's codes.
+It is slightly less accurate than the interval midpoint of "Partial rebuild": on Gaussian
+weights with one of *N* children missing, its mean squared error is 6–30% higher. A stage
+fails only when all *N* of its devices are lost, so any *N* − 1 failures are survivable,
+and with independent device failure probability *p* the pipeline runs with probability
+Π (1 − *p*ᴺ) over its stages.
+
+`syncytium-pool` simulates this: for each state of the device grid it sets every stage's
+weights from that stage's surviving children and measures perplexity.
+
 ## System design (container demo)
 
 **Roles.** One *main* container serves the parent on the GPU. *N* *child* containers each hold

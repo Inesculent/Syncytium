@@ -1,0 +1,24 @@
+# Pooled pipeline (stage 1.7) at 0.8B: the embedding stage plus 4 blocks of 6 decoder layers,
+# each stage held by 4 devices with one 4-bit child each (20 devices). The setting is the
+# pilot's best 4-bit one. Runs after the H6 thresholds are fixed in docs/hypothesis.md.
+name = "pool-0.8b"
+output = "results/pool-0.8b"
+
+[model]
+path = "Qwen/Qwen3.5-0.8B-Base"
+
+[eval]
+window = 2048
+
+[pool]
+bits = 4
+group_size = 64
+children = 4
+stages = 4
+phase = 0.5
+rotation = true
+seed = 0
+estimators = ["mean", "midpoint"]
+max_lost = 6
+samples = 8
+pattern_seed = 0
