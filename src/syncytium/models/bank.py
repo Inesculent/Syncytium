@@ -17,7 +17,7 @@ class WeightBank:
 
     Args:
         weights: The parameters to manage, from
-            :func:`~holograph.models.selection.quantized_weights`.
+            :func:`~syncytium.models.selection.quantized_weights`.
     """
 
     def __init__(self, weights: Mapping[str, nn.Parameter]) -> None:

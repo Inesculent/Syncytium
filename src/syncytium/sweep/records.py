@@ -10,7 +10,7 @@ from typing import Any
 import torch
 import transformers
 
-import holograph
+import syncytium
 
 
 class ResultLog:
@@ -46,7 +46,7 @@ def append_run_metadata(path: Path, config_path: Path) -> None:
         "git_commit": _git("rev-parse", "HEAD"),
         "git_dirty": bool(_git("status", "--porcelain")),
         "python": platform.python_version(),
-        "holograph": holograph.__version__,
+        "syncytium": syncytium.__version__,
         "torch": torch.__version__,
         "transformers": transformers.__version__,
         "device": torch.cuda.get_device_name() if torch.cuda.is_available() else "cpu",

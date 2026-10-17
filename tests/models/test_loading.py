@@ -1,6 +1,6 @@
 import torch
 
-from holograph.models import load_model
+from syncytium.models import load_model
 
 
 def test_load_model_returns_frozen_model_in_eval_mode(tiny_model, tmp_path):

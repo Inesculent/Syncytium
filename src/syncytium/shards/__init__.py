@@ -1,9 +1,9 @@
 """Child shards on disk: packed codes, manifests, verification and rebuild."""
 
-from holograph.shards.manifest import MANIFEST_NAME, Manifest, ShardError, TensorSpec, shard_name
-from holograph.shards.packing import pack, packed_size, unpack
-from holograph.shards.reader import Child, child_state_dict, read_child, rebuild_state_dict
-from holograph.shards.writer import write_children
+from syncytium.shards.manifest import MANIFEST_NAME, Manifest, ShardError, TensorSpec, shard_name
+from syncytium.shards.packing import pack, packed_size, unpack
+from syncytium.shards.reader import Child, child_state_dict, read_child, rebuild_state_dict
+from syncytium.shards.writer import write_children
 
 __all__ = [
     "MANIFEST_NAME",

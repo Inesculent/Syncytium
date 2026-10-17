@@ -7,7 +7,7 @@ Codes are laid out back to back, least significant bit first, so a tensor of n c
 import torch
 from torch import Tensor
 
-from holograph.quant.grid import MAX_BITS
+from syncytium.quant.grid import MAX_BITS
 
 BYTE = 8
 

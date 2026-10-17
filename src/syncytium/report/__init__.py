@@ -1,8 +1,8 @@
 """Summary tables and paper figures from sweep results."""
 
-from holograph.report.cli import write_report
-from holograph.report.figures import all_figures
-from holograph.report.tables import bf16_perplexity, load_results, summarize, to_markdown
+from syncytium.report.cli import write_report
+from syncytium.report.figures import all_figures
+from syncytium.report.tables import bf16_perplexity, load_results, summarize, to_markdown
 
 __all__ = [
     "all_figures",

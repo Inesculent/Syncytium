@@ -1,8 +1,8 @@
 import torch
 
-from holograph.quant import Scheme, simulate_child, simulate_rebuild
-from holograph.sweep import Condition, Kind, plan
-from holograph.sweep.config import GridConfig
+from syncytium.quant import Scheme, simulate_child, simulate_rebuild
+from syncytium.sweep import Condition, Kind, plan
+from syncytium.sweep.config import GridConfig
 
 
 def grid(**overrides):

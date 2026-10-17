@@ -14,9 +14,9 @@ from pathlib import Path
 
 from torch import Tensor
 
-from holograph.quant import Scheme
+from syncytium.quant import Scheme
 
-FORMAT = "holograph-shards/1"
+FORMAT = "syncytium-shards/1"
 MANIFEST_NAME = "manifest.json"
 
 

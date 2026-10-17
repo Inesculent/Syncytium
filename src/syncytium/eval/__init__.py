@@ -1,8 +1,8 @@
 """Evaluation: perplexity and weight memory."""
 
-from holograph.eval.corpus import load_wikitext2
-from holograph.eval.likelihood import perplexity, windows
-from holograph.eval.memory import (
+from syncytium.eval.corpus import load_wikitext2
+from syncytium.eval.likelihood import perplexity, windows
+from syncytium.eval.memory import (
     Footprint,
     ParameterCounts,
     child_footprint,

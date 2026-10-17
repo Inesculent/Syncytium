@@ -12,9 +12,9 @@ import torch
 from safetensors.torch import save_file
 from torch import Tensor
 
-from holograph.quant import Grid, Scheme, fit_grid, parent_codes, quantize_children, to_groups
-from holograph.quant.rotation import random_rotation
-from holograph.shards.manifest import (
+from syncytium.quant import Grid, Scheme, fit_grid, parent_codes, quantize_children, to_groups
+from syncytium.quant.rotation import random_rotation
+from syncytium.shards.manifest import (
     MANIFEST_NAME,
     Manifest,
     TensorSpec,
@@ -22,7 +22,7 @@ from holograph.shards.manifest import (
     shard_name,
     update_codes_hash,
 )
-from holograph.shards.packing import pack
+from syncytium.shards.packing import pack
 
 SCALE_DTYPE = torch.float16
 

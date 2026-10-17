@@ -1,6 +1,6 @@
 import torch
 
-from holograph.models import WeightBank, quantized_weights
+from syncytium.models import WeightBank, quantized_weights
 
 
 def snapshot(model):

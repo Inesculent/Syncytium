@@ -3,7 +3,7 @@ import json
 import pandas as pd
 import pytest
 
-from holograph.report import bf16_perplexity, load_results, summarize, to_markdown
+from syncytium.report import bf16_perplexity, load_results, summarize, to_markdown
 
 
 def write_rows(path, rows):

@@ -3,7 +3,7 @@ from itertools import pairwise
 import pytest
 import torch
 
-from holograph.quant import (
+from syncytium.quant import (
     child_weights,
     fit_grid,
     normalize,

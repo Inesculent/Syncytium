@@ -1,6 +1,6 @@
 import pytest
 
-from holograph.quant import Scheme
+from syncytium.quant import Scheme
 
 
 @pytest.mark.parametrize(

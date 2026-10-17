@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from holograph.shards import pack, packed_size, unpack
+from syncytium.shards import pack, packed_size, unpack
 
 
 @pytest.mark.parametrize("bits", range(1, 9))

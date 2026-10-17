@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from holograph.sweep import load_config
+from syncytium.sweep import load_config
 
 MINIMAL = """
 name = "test"

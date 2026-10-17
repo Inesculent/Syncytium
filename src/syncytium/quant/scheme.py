@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from holograph.quant.grid import MAX_BITS
+from syncytium.quant.grid import MAX_BITS
 
 
 @dataclass(frozen=True)

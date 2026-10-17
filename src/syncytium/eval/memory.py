@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from torch import nn
 
-from holograph.quant import Scheme
+from syncytium.quant import Scheme
 
 SCALE_BITS = 16
 DENSE_BITS = 16

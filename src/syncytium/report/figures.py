@@ -12,7 +12,7 @@ import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from holograph.report.tables import KINDS, bf16_perplexity
+from syncytium.report.tables import KINDS, bf16_perplexity
 
 SERIES = ("#2a78d6", "#eb6834", "#1baf7a")
 MARKERS = ("o", "s", "^")

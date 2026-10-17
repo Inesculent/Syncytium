@@ -1,4 +1,4 @@
-"""Command line: ``holograph-shard MODEL --out DIR [scheme options]``."""
+"""Command line: ``syncytium-shard MODEL --out DIR [scheme options]``."""
 
 import argparse
 from collections.abc import Sequence
@@ -6,10 +6,10 @@ from pathlib import Path
 
 import torch
 
-from holograph.models import load_model, split_parameters
-from holograph.quant import Scheme
-from holograph.shards.manifest import shard_name
-from holograph.shards.writer import write_children
+from syncytium.models import load_model, split_parameters
+from syncytium.quant import Scheme
+from syncytium.shards.manifest import shard_name
+from syncytium.shards.writer import write_children
 
 
 def main(argv: Sequence[str] | None = None) -> None:

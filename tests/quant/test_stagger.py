@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from holograph.quant import (
+from syncytium.quant import (
     child_codes,
     child_weights,
     fit_grid,

@@ -1,14 +1,14 @@
 import pytest
 
-from holograph.eval import (
+from syncytium.eval import (
     ParameterCounts,
     child_footprint,
     count_parameters,
     dense_footprint,
     parent_footprint,
 )
-from holograph.models import quantized_weights
-from holograph.quant import Scheme
+from syncytium.models import quantized_weights
+from syncytium.quant import Scheme
 
 ALL_QUANTIZED = ParameterCounts(quantized=64_000, full_precision=0)
 

@@ -8,16 +8,16 @@ from pathlib import Path
 from safetensors.torch import load_file
 from torch import Tensor
 
-from holograph.quant import Grid, child_weights, parent_codes, parent_weights, partial_weights
-from holograph.quant.rotation import random_rotation
-from holograph.shards.manifest import (
+from syncytium.quant import Grid, child_weights, parent_codes, parent_weights, partial_weights
+from syncytium.quant.rotation import random_rotation
+from syncytium.shards.manifest import (
     Manifest,
     ShardError,
     TensorSpec,
     file_sha256,
     update_codes_hash,
 )
-from holograph.shards.packing import unpack
+from syncytium.shards.packing import unpack
 
 
 @dataclass(frozen=True)

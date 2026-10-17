@@ -1,10 +1,10 @@
 import pytest
 import torch
 
-from holograph.eval import perplexity
-from holograph.sweep import ResultLog, plan, run_conditions
-from holograph.sweep import runner as runner_module
-from holograph.sweep.config import GridConfig
+from syncytium.eval import perplexity
+from syncytium.sweep import ResultLog, plan, run_conditions
+from syncytium.sweep import runner as runner_module
+from syncytium.sweep.config import GridConfig
 
 # The tiny model's narrowest input dimension is 32, so groups of 32 fit every weight.
 GRID = GridConfig(bits=(4,), group_sizes=(32,), children=(2, 4), max_missing=1, rtn_bits=(4,))

@@ -3,7 +3,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "holograph"
+name = "syncytium"
 dynamic = ["version"]
 description = "Functional low-precision LLM shards that rebuild their parent model."
 readme = "README.md"
@@ -54,15 +54,15 @@ dev = [
 ]
 
 [project.scripts]
-holograph-sweep = "holograph.sweep.cli:main"
-holograph-report = "holograph.report.cli:main"
-holograph-shard = "holograph.shards.cli:main"
+syncytium-sweep = "syncytium.sweep.cli:main"
+syncytium-report = "syncytium.report.cli:main"
+syncytium-shard = "syncytium.shards.cli:main"
 
 [tool.hatch.version]
-path = "src/holograph/__init__.py"
+path = "src/syncytium/__init__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/holograph"]
+packages = ["src/syncytium"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,7 +1,7 @@
 import pytest
 
-from holograph.report import all_figures, load_results, write_report
-from holograph.report.figures import _mark
+from syncytium.report import all_figures, load_results, write_report
+from syncytium.report.figures import _mark
 
 
 @pytest.fixture(scope="module")

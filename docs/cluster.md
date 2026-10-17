@@ -4,13 +4,19 @@ The scripts in `slurm/` run one sweep config per job on a single GPU. They were 
 cluster with 2x H100 nodes and a Lustre file system, following the conventions of other
 projects on the same cluster; adjust the `#SBATCH` lines in `slurm/sweep.sbatch` for others.
 
-## One-time setup (login node)
+## One-time setup
 
 ```bash
-git clone <this repository> && cd SurviveAnything
-export SBATCH_ACCOUNT=<your account>   # add to ~/.bashrc; sbatch reads it automatically
+git clone <this repository> && cd Syncytium
+export SBATCH_ACCOUNT=<your account>   # add to ~/.bashrc; sbatch and srun read it automatically
+srun --qos=normal --cpus-per-task=6 --mem=32G --time=01:00:00 --pty bash
 bash slurm/setup.sh                     # creates .venv and installs the package
 ```
+
+Run the setup inside the interactive allocation, not on the login node. Login nodes cap
+virtual memory, so the script's final `import torch` fails there with `libtorch_cuda.so:
+failed to map segment from shared object` even though the install itself succeeded. The
+same applies to anything else that imports torch, such as `pytest` or `syncytium-report`.
 
 If `python3.12` is not on the path, create one with Miniforge
 (`conda create -n py312 python=3.12`) and pass it in:
@@ -30,7 +36,7 @@ Node `evc33` has been excluded by other projects on this cluster.
 
 ## Monitoring and resuming
 
-- Logs: `slurm_logs/holograph-<config>-<job id>.out` and `.err`.
+- Logs: `slurm_logs/syncytium-<config>-<job id>.out` and `.err`.
 - Progress: one line per condition in the `.out` log.
 - A job that hits its time limit can be resubmitted with the same command; the sweep skips
   every condition already in `results/<name>/results.jsonl`.
@@ -41,5 +47,5 @@ Node `evc33` has been excluded by other projects on this cluster.
   cache (`~/.cache/huggingface`, on Lustre). Set `HF_HOME` to move it.
 - Results are written under `results/<name>/` in the repository on Lustre. Copy them back
   for analysis, for example:
-  `rsync -av <cluster>:SurviveAnything/results/sweep-9b results/`
-- `holograph-report results/<name>` then writes the summary and figures to `docs/results/`.
+  `rsync -av <cluster>:Syncytium/results/sweep-9b results/`
+- `syncytium-report results/<name>` then writes the summary and figures to `docs/results/`.

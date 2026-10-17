@@ -1,4 +1,4 @@
-# Holograph
+# Syncytium
 
 **Survive Anything:** low-precision LLM shards that each run on their own and together rebuild
 their parent model.
@@ -84,8 +84,8 @@ pre-commit install
 ## Running a sweep
 
 ```bash
-holograph-sweep configs/screen-0.8b.toml   # pipeline check, about 5 minutes
-holograph-sweep configs/pilot-0.8b.toml    # full 0.8B pilot, about 2 hours on an RTX 3080
+syncytium-sweep configs/screen-0.8b.toml   # pipeline check, about 5 minutes
+syncytium-sweep configs/pilot-0.8b.toml    # full 0.8B pilot, about 2 hours on an RTX 3080
 ```
 
 Each sweep writes to `results/<name>/`:
@@ -98,7 +98,7 @@ Each sweep writes to `results/<name>/`:
 An interrupted sweep resumes where it stopped when rerun with the same config.
 
 ```bash
-holograph-report results/pilot-0.8b        # summary table and figures in docs/results/
+syncytium-report results/pilot-0.8b        # summary table and figures in docs/results/
 ```
 
 Larger models run on a SLURM cluster; see [running on a cluster](docs/cluster.md).

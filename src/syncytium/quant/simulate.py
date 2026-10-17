@@ -11,11 +11,11 @@ from collections.abc import Callable, Collection
 import torch
 from torch import Tensor
 
-from holograph.quant.grid import fit_grid, from_groups, normalize, to_groups
-from holograph.quant.rebuild import parent_codes, parent_weights, partial_weights
-from holograph.quant.rotation import random_rotation
-from holograph.quant.scheme import Scheme
-from holograph.quant.stagger import child_codes, child_weights
+from syncytium.quant.grid import fit_grid, from_groups, normalize, to_groups
+from syncytium.quant.rebuild import parent_codes, parent_weights, partial_weights
+from syncytium.quant.rotation import random_rotation
+from syncytium.quant.scheme import Scheme
+from syncytium.quant.stagger import child_codes, child_weights
 
 # Groups processed at once. Bounds temporary memory for large tensors such as embeddings.
 CHUNK_GROUPS = 1 << 18

@@ -1,5 +1,5 @@
-import holograph
+import syncytium
 
 
 def test_version_is_set():
-    assert holograph.__version__
+    assert syncytium.__version__

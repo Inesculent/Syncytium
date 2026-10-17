@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 from transformers import PreTrainedModel
 
-from holograph.eval import (
+from syncytium.eval import (
     Footprint,
     ParameterCounts,
     child_footprint,
@@ -22,11 +22,11 @@ from holograph.eval import (
     perplexity,
     windows,
 )
-from holograph.models import WeightBank, load_model, load_tokenizer, quantized_weights
-from holograph.quant import Scheme
-from holograph.sweep.conditions import Condition, Kind, plan
-from holograph.sweep.config import SweepConfig
-from holograph.sweep.records import ResultLog, append_run_metadata
+from syncytium.models import WeightBank, load_model, load_tokenizer, quantized_weights
+from syncytium.quant import Scheme
+from syncytium.sweep.conditions import Condition, Kind, plan
+from syncytium.sweep.config import SweepConfig
+from syncytium.sweep.records import ResultLog, append_run_metadata
 
 logger = logging.getLogger(__name__)
 

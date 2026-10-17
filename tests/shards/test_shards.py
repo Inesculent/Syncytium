@@ -1,10 +1,10 @@
 import pytest
 import torch
 
-from holograph.eval import ParameterCounts, child_footprint
-from holograph.models import split_parameters
-from holograph.quant import Scheme
-from holograph.shards import (
+from syncytium.eval import ParameterCounts, child_footprint
+from syncytium.models import split_parameters
+from syncytium.quant import Scheme
+from syncytium.shards import (
     MANIFEST_NAME,
     Manifest,
     ShardError,
@@ -14,7 +14,7 @@ from holograph.shards import (
     shard_name,
     write_children,
 )
-from holograph.shards.writer import quantize_tensor
+from syncytium.shards.writer import quantize_tensor
 
 SCHEME = Scheme(bits=3, group_size=32, num_children=4)
 

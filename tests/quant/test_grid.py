@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from holograph.quant import fit_grid, from_groups, normalize, to_groups
+from syncytium.quant import fit_grid, from_groups, normalize, to_groups
 
 
 def test_groups_round_trip():

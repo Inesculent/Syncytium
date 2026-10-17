@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=holograph-sweep
+#SBATCH --job-name=syncytium-sweep
 #SBATCH --qos=normal
 #SBATCH --gres=gpu:1
 #SBATCH --constraint=h100
@@ -20,4 +20,4 @@ source .venv/bin/activate
 
 echo "commit $(git rev-parse --short HEAD)  host $(hostname)  config ${CONFIG}"
 nvidia-smi -L
-PYTHONUNBUFFERED=1 holograph-sweep "${CONFIG}"
+PYTHONUNBUFFERED=1 syncytium-sweep "${CONFIG}"

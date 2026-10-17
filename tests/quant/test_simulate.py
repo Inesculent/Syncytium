@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from holograph.quant import (
+from syncytium.quant import (
     Scheme,
     child_weights,
     fit_grid,
@@ -11,7 +11,7 @@ from holograph.quant import (
     simulate_rebuild,
     to_groups,
 )
-from holograph.quant import simulate as simulate_module
+from syncytium.quant import simulate as simulate_module
 
 SCHEME = Scheme(bits=3, group_size=64, num_children=4)
 

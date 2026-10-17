@@ -3,7 +3,7 @@ import math
 import pytest
 import torch
 
-from holograph.eval import likelihood, perplexity, windows
+from syncytium.eval import likelihood, perplexity, windows
 
 
 def test_windows_drop_the_remainder():

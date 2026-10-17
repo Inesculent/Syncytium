@@ -5,8 +5,8 @@ from collections.abc import Mapping, Sequence
 import torch
 from torch import Tensor
 
-from holograph.quant.grid import Grid
-from holograph.quant.stagger import offset
+from syncytium.quant.grid import Grid
+from syncytium.quant.stagger import offset
 
 
 def parent_codes(children: Sequence[Tensor]) -> Tensor:

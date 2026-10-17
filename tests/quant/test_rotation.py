@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from holograph.quant import Scheme, simulate_child, simulate_rebuild
-from holograph.quant.rotation import hadamard, random_rotation
+from syncytium.quant import Scheme, simulate_child, simulate_rebuild
+from syncytium.quant.rotation import hadamard, random_rotation
 
 
 def test_hadamard_of_order_two():

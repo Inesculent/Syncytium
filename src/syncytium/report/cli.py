@@ -1,11 +1,11 @@
-"""Command line: ``holograph-report RESULTS_DIR [--out DIR]``."""
+"""Command line: ``syncytium-report RESULTS_DIR [--out DIR]``."""
 
 import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
-from holograph.report.figures import all_figures
-from holograph.report.tables import bf16_perplexity, load_results, summarize, to_markdown
+from syncytium.report.figures import all_figures
+from syncytium.report.tables import bf16_perplexity, load_results, summarize, to_markdown
 
 
 def main(argv: Sequence[str] | None = None) -> None:

@@ -7,7 +7,7 @@ The phase φ is 0 by default; φ = ½ centers the offsets (see "Offset phase").
 import torch
 from torch import Tensor
 
-from holograph.quant.grid import Grid, normalize
+from syncytium.quant.grid import Grid, normalize
 
 
 def offset(index: int, num_children: int, phase: float = 0.0) -> float:
@@ -27,7 +27,7 @@ def child_codes(x: Tensor, grid: Grid, index: int, num_children: int, phase: flo
     """Codes of one child, q_k = ⌊x + (k + φ)/N⌋, as ``uint8``.
 
     Args:
-        x: Weights in grid units, from :func:`~holograph.quant.grid.normalize`.
+        x: Weights in grid units, from :func:`~syncytium.quant.grid.normalize`.
         grid: The shared grid.
         index: Child index k.
         num_children: Number of children N.

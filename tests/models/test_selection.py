@@ -1,6 +1,6 @@
 from torch import nn
 
-from holograph.models import quantized_weights
+from syncytium.models import quantized_weights
 
 
 def test_selects_embeddings_and_every_linear_layer(tiny_model):

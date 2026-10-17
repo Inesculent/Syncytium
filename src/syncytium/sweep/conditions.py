@@ -11,9 +11,9 @@ from enum import StrEnum
 from fractions import Fraction
 from itertools import combinations, product
 
-from holograph.models import Transform
-from holograph.quant import Scheme, simulate_child, simulate_rebuild
-from holograph.sweep.config import GridConfig
+from syncytium.models import Transform
+from syncytium.quant import Scheme, simulate_child, simulate_rebuild
+from syncytium.sweep.config import GridConfig
 
 
 class Kind(StrEnum):

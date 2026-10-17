@@ -1,12 +1,12 @@
-"""Command line: ``holograph-sweep CONFIG``."""
+"""Command line: ``syncytium-sweep CONFIG``."""
 
 import argparse
 import logging
 from collections.abc import Sequence
 from pathlib import Path
 
-from holograph.sweep.config import load_config
-from holograph.sweep.runner import run_sweep
+from syncytium.sweep.config import load_config
+from syncytium.sweep.runner import run_sweep
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -16,5 +16,5 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
     # Third-party libraries stay at WARNING; only this package reports progress.
     logging.basicConfig(format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
-    logging.getLogger("holograph").setLevel(logging.INFO)
+    logging.getLogger("syncytium").setLevel(logging.INFO)
     run_sweep(load_config(args.config), args.config)

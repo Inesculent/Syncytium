@@ -2,8 +2,8 @@ import pytest
 import torch
 from transformers.models.qwen3_5 import Qwen3_5ForCausalLM
 
-from holograph.sweep import ResultLog, plan, run_conditions
-from holograph.sweep.config import GridConfig
+from syncytium.sweep import ResultLog, plan, run_conditions
+from syncytium.sweep.config import GridConfig
 
 GRID = GridConfig(
     bits=(3, 4),
