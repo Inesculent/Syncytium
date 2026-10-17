@@ -30,6 +30,12 @@ experiments = [
     "accelerate>=1.10",
     "datasets>=3.0",
 ]
+# Summary tables and paper figures from sweep results.
+report = [
+    "pandas>=2.2",
+    "matplotlib>=3.9",
+    "tabulate>=0.9", # pandas.DataFrame.to_markdown
+]
 # Writing children as GGUF files that run in stock llama.cpp.
 export = [
     "gguf>=0.17",
@@ -49,6 +55,7 @@ dev = [
 
 [project.scripts]
 holograph-sweep = "holograph.sweep.cli:main"
+holograph-report = "holograph.report.cli:main"
 
 [tool.hatch.version]
 path = "src/holograph/__init__.py"

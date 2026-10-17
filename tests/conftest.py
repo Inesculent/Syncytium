@@ -10,7 +10,7 @@ def groups() -> torch.Tensor:
     return 0.02 * torch.randn(512, 64, generator=generator, dtype=torch.float64)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def tiny_config() -> Qwen3_5TextConfig:
     """A four-layer Qwen3.5 text config with both Gated DeltaNet and full attention layers."""
     return Qwen3_5TextConfig(

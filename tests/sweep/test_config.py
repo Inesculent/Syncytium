@@ -46,7 +46,8 @@ def test_rejects_empty_lists(tmp_path):
         load_config(write(tmp_path, MINIMAL.replace("bits = [4]", "bits = []")))
 
 
-@pytest.mark.parametrize("name", ["screen-0.8b", "pilot-0.8b"])
-def test_repository_configs_are_valid(name):
-    config = load_config(Path("configs") / f"{name}.toml")
-    assert config.name == name
+@pytest.mark.parametrize("path", sorted(Path("configs").glob("*.toml")), ids=lambda p: p.stem)
+def test_repository_configs_are_valid(path):
+    config = load_config(path)
+    assert config.name == path.stem
+    assert config.output == Path("results") / path.stem

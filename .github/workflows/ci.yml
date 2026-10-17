@@ -16,7 +16,7 @@ jobs:
       - name: Install
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e ".[experiments,dev]"
+          pip install -e ".[experiments,report,dev]"
       - name: Lint
         run: |
           ruff check .

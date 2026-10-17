@@ -12,7 +12,7 @@ own. Decisions taken while planning are recorded at the end.
 | 1.3 Evaluation | WikiText-2 perplexity with fixed windows; memory accounting in bits per weight including unquantized tensors. | `src/holograph/eval/` |
 | 1.4 Sweep runner | TOML configs; resumable JSONL results with config, seed, versions and commit. Offsets for *N* = 2 and 4 are subsets of *N* = 8, so only 8 distinct children are evaluated per setting. Includes an offset-phase ablation, *k*/*N* versus (*k* + ½)/*N* (see below). | `scripts/`, `configs/` |
 | 1.5 Shared rotation | Block-diagonal randomized Hadamard transform with block size equal to the group size. Test that the rebuild identity still holds. | `src/holograph/quant/` |
-| 1.6 Pilot and sweep | 0.8B pilot; fix the usable-child threshold in the hypothesis document; run 2B and 4B; plots and write-up. | `docs/results/` |
+| 1.6 Pilot and sweep | Report module (summary table with H3/H4 checks, recovery, Pareto and offset figures) and SLURM scripts. 0.8B pilot; fix the usable-child threshold in the hypothesis document; run 2B and 4B (locally or on the cluster) and 9B on the cluster; write-up. | `src/holograph/report/`, `slurm/`, `docs/results/` |
 
 ## Phase 2: Container demo
 

@@ -46,11 +46,14 @@ Current:
 
 ```
 configs/                sweep configs (TOML)
-docs/                   hypothesis, method, plan and future work
+docs/                   hypothesis, method, plan, cluster guide and future work
+docs/results/           summary tables and figures written by holograph-report
+slurm/                  cluster setup, job script and submission helper
 src/holograph/quant/    staggered quantization, rebuild, partial rebuild, simulation
 src/holograph/models/   loading the text stack, choosing weights, swapping weights in place
 src/holograph/eval/     corpus, perplexity and memory accounting
 src/holograph/sweep/    sweep configs, conditions, results log, runner and CLI
+src/holograph/report/   summary tables (with hypothesis checks) and paper figures
 tests/                  unit tests, mirroring the package layout
 ```
 

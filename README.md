@@ -29,6 +29,7 @@ the rebuild, which is where the name comes from.
 - [Hypothesis and goals](docs/hypothesis.md): claims, success criteria, evaluation protocol.
 - [Method](docs/method.md): the quantization scheme, rebuild math and system design.
 - [Plan](docs/plan.md): stages, risks and decisions.
+- [Running on a cluster](docs/cluster.md): SLURM setup, submission and results.
 - [Future work](docs/future-work.md): studies that can branch from this one.
 - [Contributing](CONTRIBUTING.md): setup, code standards and project layout.
 
@@ -63,6 +64,7 @@ each phase installs only what it needs:
 |---------------|-------------------------------------------------|
 | *(core)*      | Quantization and rebuild math (PyTorch, safetensors) |
 | `experiments` | Model loading and perplexity evaluation         |
+| `report`      | Summary tables and figures                      |
 | `export`      | Writing children as GGUF files for llama.cpp    |
 | `harness`     | Container roles, heartbeats and shard transfer  |
 | `dev`         | Tests, linting and pre-commit hooks             |
@@ -74,7 +76,7 @@ python -m venv .venv                # Windows: py -3.12 -m venv .venv
 source .venv/bin/activate           # Windows: .venv\Scripts\activate
 
 # Install PyTorch for your CUDA version first: https://pytorch.org/get-started/locally/
-pip install -e ".[experiments,export,dev]"
+pip install -e ".[experiments,report,dev]"
 pre-commit install
 ```
 
@@ -93,6 +95,12 @@ Each sweep writes to `results/<name>/`:
   device.
 
 An interrupted sweep resumes where it stopped when rerun with the same config.
+
+```bash
+holograph-report results/pilot-0.8b        # summary table and figures in docs/results/
+```
+
+Larger models run on a SLURM cluster; see [running on a cluster](docs/cluster.md).
 
 ## Responsible scope
 
