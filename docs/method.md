@@ -58,12 +58,21 @@ of a single child.
 
 ## What each child stores
 
-- Integer codes for every quantized weight, packed to *b* bits.
-- The shared per-group minimum *m* and step Δ (identical in every child).
+Each child is one safetensors file:
+
+- Integer codes for every quantized weight, packed densely to *b* bits (least significant bit
+  first, so 3-bit codes need no padding per value).
+- The shared per-group minimum *m* and step Δ in fp16 (identical in every child). When a grid
+  is stored, *m* is rounded down and Δ up to the nearest fp16 values, so every code still fits
+  in *b* bits and the rebuild stays exact. Δ grows by at most about 0.1%; phase 1 simulations
+  use the unrounded float32 grid.
 - Every tensor that is not quantized (norms, Gated DeltaNet convolution and decay parameters),
-  in full precision.
-- A manifest: model id, *N*, *b*, *g*, the child's offset index *k*, rotation seed if any, and
-  hashes of the reference rebuild.
+  unchanged.
+
+Every node also keeps the set's manifest: model id, scheme (*b*, *g*, *N*, φ, rotation seed),
+the name and shape of every tensor, the SHA-256 of each child's file, and the SHA-256 of the
+parent's integer codes. A shard is checked against its hash before use, and a full rebuild
+must reproduce the parent hash, which proves it is bit-exact.
 
 Embeddings are quantized like any other weight. Qwen3.5 uses a 248K-token vocabulary with tied
 embeddings, so the embedding table is roughly a quarter of the 2B model and cannot be left in

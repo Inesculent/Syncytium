@@ -28,6 +28,7 @@ htmlcov/
 /runs/
 /wandb/
 /slurm_logs/
+/shards/
 
 # Editors and OS
 .idea/

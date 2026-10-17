@@ -19,3 +19,11 @@ def quantized_weights(model: nn.Module) -> dict[str, nn.Parameter]:
             seen.add(id(module.weight))
             selected[f"{module_name}.weight"] = module.weight
     return selected
+
+
+def split_parameters(model: nn.Module) -> tuple[dict[str, nn.Parameter], dict[str, nn.Parameter]]:
+    """Every parameter, split into (quantized, full precision); tied weights appear once."""
+    quantized = quantized_weights(model)
+    ids = {id(p) for p in quantized.values()}
+    full = {name: p for name, p in model.named_parameters() if id(p) not in ids}
+    return quantized, full

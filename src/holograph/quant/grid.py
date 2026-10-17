@@ -52,11 +52,17 @@ def from_groups(groups: Tensor, shape: torch.Size) -> Tensor:
     return groups.reshape(shape)
 
 
-def fit_grid(groups: Tensor, bits: int) -> Grid:
+def fit_grid(groups: Tensor, bits: int, storage: torch.dtype | None = None) -> Grid:
     """Fit the grid of each group: m = min(w) and Δ = (M - m) / (2^b - 1).
 
     A constant group gets the smallest positive step, so its weights map to code 0 and
     dequantize back to m up to a negligible error.
+
+    Args:
+        groups: Weights arranged in groups, from :func:`to_groups`.
+        bits: Bits per child code, b.
+        storage: If given, m and Δ are made exactly representable in this dtype (as in
+            shard files), rounding m down and Δ up so every code still fits in b bits.
 
     Raises:
         ValueError: If ``bits`` is outside ``[1, 8]``.
@@ -64,9 +70,23 @@ def fit_grid(groups: Tensor, bits: int) -> Grid:
     if not 1 <= bits <= MAX_BITS:
         raise ValueError(f"bits must be in [1, {MAX_BITS}], got {bits}")
     minimum = groups.amin(dim=1, keepdim=True)
+    if storage is not None:
+        minimum = _round_toward(minimum, storage, float("-inf"))
     span = groups.amax(dim=1, keepdim=True) - minimum
-    step = (span / ((1 << bits) - 1)).clamp_min(torch.finfo(groups.dtype).tiny)
+    smallest = torch.finfo(storage or groups.dtype).tiny
+    step = (span / ((1 << bits) - 1)).clamp_min(smallest)
+    if storage is not None:
+        step = _round_toward(step, storage, float("inf"))
     return Grid(minimum=minimum, step=step, bits=bits)
+
+
+def _round_toward(values: Tensor, dtype: torch.dtype, direction: float) -> Tensor:
+    """Nearest value representable in ``dtype`` on the ``direction`` side of ``values``."""
+    rounded = values.to(dtype)
+    back = rounded.to(values.dtype)
+    wrong_side = back > values if direction < 0 else back < values
+    stepped = torch.nextafter(rounded, torch.full_like(rounded, direction))
+    return torch.where(wrong_side, stepped, rounded).to(values.dtype)
 
 
 def normalize(groups: Tensor, grid: Grid) -> Tensor:

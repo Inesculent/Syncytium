@@ -46,7 +46,8 @@ the rebuild, which is where the name comes from.
 **Hardware**
 
 - Phase 1: an NVIDIA GPU with at least 10 GB of memory (reference machine: RTX 3080 10 GB).
-  The 4B model in bf16 needs about 8 GB.
+  That covers the 0.8B and 2B models; the 4B model's bf16 weights alone take 9.3 GB, so 4B
+  and larger run on a cluster GPU.
 - Phase 2: children run on CPU through llama.cpp; the main container uses the GPU.
 - Disk: about 15 GB for the 0.8B, 2B and 4B checkpoints, plus generated children.
 

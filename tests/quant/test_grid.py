@@ -26,6 +26,22 @@ def test_constant_group_has_positive_step():
     assert grid.step.item() > 0
 
 
+@pytest.mark.parametrize("bits", [2, 3, 4])
+def test_storage_grid_is_exact_in_fp16_and_still_covers_every_weight(groups, bits):
+    grid = fit_grid(groups.float(), bits, storage=torch.float16)
+    for values in (grid.minimum, grid.step):
+        assert torch.equal(values.half().float(), values)
+    x = normalize(groups.float(), grid)
+    assert x.min() >= 0
+    assert x.max() <= 2**bits - 1
+
+
+def test_storage_grid_stays_close_to_the_exact_grid(groups):
+    exact = fit_grid(groups.float(), 4)
+    stored = fit_grid(groups.float(), 4, storage=torch.float16)
+    assert torch.allclose(stored.step, exact.step, rtol=2e-3)
+
+
 @pytest.mark.parametrize("bits", [0, 9])
 def test_fit_grid_rejects_unsupported_bits(groups, bits):
     with pytest.raises(ValueError, match="bits"):

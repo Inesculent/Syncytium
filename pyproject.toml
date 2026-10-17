@@ -56,6 +56,7 @@ dev = [
 [project.scripts]
 holograph-sweep = "holograph.sweep.cli:main"
 holograph-report = "holograph.report.cli:main"
+holograph-shard = "holograph.shards.cli:main"
 
 [tool.hatch.version]
 path = "src/holograph/__init__.py"

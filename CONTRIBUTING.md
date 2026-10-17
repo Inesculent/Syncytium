@@ -54,14 +54,15 @@ src/holograph/models/   loading the text stack, choosing weights, swapping weigh
 src/holograph/eval/     corpus, perplexity and memory accounting
 src/holograph/sweep/    sweep configs, conditions, results log, runner and CLI
 src/holograph/report/   summary tables (with hypothesis checks) and paper figures
+src/holograph/shards/   bit packing, shard files, manifests, verification and rebuild
 tests/                  unit tests, mirroring the package layout
 ```
 
 Planned as work lands:
 
 ```
-src/holograph/export/   GGUF writer for children
-src/holograph/harness/  container roles, heartbeats, shard transfer, operator controls
+src/holograph/export/   GGUF writer for children (stage 2.2)
+src/holograph/harness/  container roles, heartbeats, shard transfer, operator controls (2.3)
 docker/                 Dockerfiles and compose files
 ```
 
