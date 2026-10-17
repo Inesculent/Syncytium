@@ -13,11 +13,13 @@ class Scheme:
         bits: Bits per child code, b.
         group_size: Weights per quantization group, g.
         num_children: Number of children, N.
+        phase: Offset phase φ; child k uses offset (k + φ)/N.
     """
 
     bits: int
     group_size: int
     num_children: int
+    phase: float = 0.0
 
     def __post_init__(self) -> None:
         if not 1 <= self.bits <= MAX_BITS:
@@ -26,3 +28,5 @@ class Scheme:
             raise ValueError(f"group_size must be positive, got {self.group_size}")
         if self.num_children < 1:
             raise ValueError(f"num_children must be positive, got {self.num_children}")
+        if not 0 <= self.phase < 1:
+            raise ValueError(f"phase must be in [0, 1), got {self.phase}")

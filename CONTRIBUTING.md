@@ -45,21 +45,20 @@ The code accompanies a paper, so readers should be able to check it against the
 Current:
 
 ```
-docs/           hypothesis, method and future work
-src/holograph/  the Python package
-tests/          unit tests
+configs/                sweep configs (TOML)
+docs/                   hypothesis, method, plan and future work
+src/holograph/quant/    staggered quantization, rebuild, partial rebuild, simulation
+src/holograph/models/   loading the text stack, choosing weights, swapping weights in place
+src/holograph/eval/     corpus, perplexity and memory accounting
+src/holograph/sweep/    sweep configs, conditions, results log, runner and CLI
+tests/                  unit tests, mirroring the package layout
 ```
 
 Planned as work lands:
 
 ```
-src/holograph/quant/    staggered quantization, rebuild, partial decoding
-src/holograph/models/   loading the Qwen3.5 text stack, choosing tensors to quantize
-src/holograph/eval/     perplexity and memory accounting
 src/holograph/export/   GGUF writer for children
 src/holograph/harness/  container roles, heartbeats, shard transfer, operator controls
-configs/                experiment configs
-scripts/                command-line entry points
 docker/                 Dockerfiles and compose files
 ```
 

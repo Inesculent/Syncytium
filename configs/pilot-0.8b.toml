@@ -1,0 +1,18 @@
+# Pilot sweep (stage 1.6). Its results fix the usable-child threshold in
+# docs/hypothesis.md before the 2B and 4B sweeps run.
+name = "pilot-0.8b"
+output = "results/pilot-0.8b"
+
+[model]
+path = "Qwen/Qwen3.5-0.8B-Base"
+
+[eval]
+window = 2048
+
+[grid]
+bits = [2, 3, 4]
+group_sizes = [64]
+children = [2, 4, 8]
+phases = [0.0, 0.5]
+max_missing = 1
+rtn_bits = [2, 3, 4, 5, 6, 7, 8]

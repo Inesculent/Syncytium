@@ -78,6 +78,22 @@ pip install -e ".[experiments,export,dev]"
 pre-commit install
 ```
 
+## Running a sweep
+
+```bash
+holograph-sweep configs/screen-0.8b.toml   # pipeline check, about 5 minutes
+holograph-sweep configs/pilot-0.8b.toml    # full 0.8B pilot, about 2 hours on an RTX 3080
+```
+
+Each sweep writes to `results/<name>/`:
+
+- `results.jsonl`: one row per condition (perplexity, bits per weight, offsets used).
+  Conditions that produce identical weights are evaluated once and marked `reused_from`.
+- `runs.jsonl`: one entry per invocation with the config, git commit, package versions and
+  device.
+
+An interrupted sweep resumes where it stopped when rerun with the same config.
+
 ## Responsible scope
 
 This project studies **fault tolerance on hardware the operator controls**. The system rebuilds

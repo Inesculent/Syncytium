@@ -21,11 +21,12 @@ CHUNK_GROUPS = 1 << 18
 
 def simulate_child(weight: Tensor, scheme: Scheme, index: int) -> Tensor:
     """Dequantized weights of child ``index`` (k) under ``scheme``."""
+    n, phase = scheme.num_children, scheme.phase
 
     def quantize(groups: Tensor) -> Tensor:
         grid = fit_grid(groups, scheme.bits)
-        codes = child_codes(normalize(groups, grid), grid, index, scheme.num_children)
-        return child_weights(codes, grid, index, scheme.num_children)
+        codes = child_codes(normalize(groups, grid), grid, index, n, phase)
+        return child_weights(codes, grid, index, n, phase)
 
     return _map_groups(weight, scheme.group_size, quantize)
 
@@ -37,14 +38,15 @@ def simulate_rebuild(weight: Tensor, scheme: Scheme, indices: Collection[int]) -
     partial rebuild by interval intersection.
     """
     available = sorted(set(indices))
+    n, phase = scheme.num_children, scheme.phase
 
     def rebuild(groups: Tensor) -> Tensor:
         grid = fit_grid(groups, scheme.bits)
         x = normalize(groups, grid)
-        codes = {k: child_codes(x, grid, k, scheme.num_children) for k in available}
-        if len(codes) == scheme.num_children:
-            return parent_weights(parent_codes(list(codes.values())), grid, scheme.num_children)
-        return partial_weights(codes, grid, scheme.num_children)
+        codes = {k: child_codes(x, grid, k, n, phase) for k in available}
+        if len(codes) == n:
+            return parent_weights(parent_codes(list(codes.values())), grid, n, phase)
+        return partial_weights(codes, grid, n, phase)
 
     return _map_groups(weight, scheme.group_size, rebuild)
 

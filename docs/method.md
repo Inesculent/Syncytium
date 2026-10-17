@@ -35,6 +35,19 @@ parent needs about *b* + log₂ *N* bits per weight.
 Staggering matters. Averaging children with random offsets (dithering) only reduces the error
 as 1/√*N*; staggered offsets reduce it as 1/*N*.
 
+## Offset phase
+
+All offsets can be shifted by a common phase φ in [0, 1), so child *k* uses (*k* + φ)/*N*.
+Applying Hermite's identity to *x* + φ/*N* gives *Q* = Σₖ *q*ₖ = ⌊*N x* + φ⌋, so the rebuild
+stays exact, with *ŵ* = *m* + (Δ/*N*)(*Q* + ½ − φ). With φ = 0 the parent is a floor quantizer
+on the fine grid; with φ = ½ it is round-to-nearest.
+
+The phase changes which children exist. The child with offset ½ places levels exactly on each
+group's minimum and maximum, so it reproduces outliers exactly; the child with offset 0 misses
+both by Δ/2. Choosing φ = ½ removes the offset-0 child. With φ = 0, offsets nest across
+powers of two (the children for *N* = 4 are a subset of those for *N* = 8), which the sweep
+uses to avoid evaluating the same model twice.
+
 ## Partial rebuild
 
 With only a subset of children available, each child still bounds the true value: child *k*

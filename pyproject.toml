@@ -47,6 +47,9 @@ dev = [
     "pre-commit>=4.0",
 ]
 
+[project.scripts]
+holograph-sweep = "holograph.sweep.cli:main"
+
 [tool.hatch.version]
 path = "src/holograph/__init__.py"
 
