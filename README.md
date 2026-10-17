@@ -28,6 +28,7 @@ the rebuild, which is where the name comes from.
 
 - [Hypothesis and goals](docs/hypothesis.md): claims, success criteria, evaluation protocol.
 - [Method](docs/method.md): the quantization scheme, rebuild math and system design.
+- [Plan](docs/plan.md): stages, risks and decisions.
 - [Future work](docs/future-work.md): studies that can branch from this one.
 - [Contributing](CONTRIBUTING.md): setup, code standards and project layout.
 
@@ -60,7 +61,7 @@ each phase installs only what it needs:
 
 | Extra         | Purpose                                         |
 |---------------|-------------------------------------------------|
-| *(core)*      | Quantization and rebuild math (NumPy, safetensors) |
+| *(core)*      | Quantization and rebuild math (PyTorch, safetensors) |
 | `experiments` | Model loading and perplexity evaluation         |
 | `export`      | Writing children as GGUF files for llama.cpp    |
 | `harness`     | Container roles, heartbeats and shard transfer  |

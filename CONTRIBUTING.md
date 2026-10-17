@@ -23,7 +23,7 @@ The code accompanies a paper, so readers should be able to check it against the
   complexity, arguments, branches and statements; split code rather than suppress the check.
 - **Types and docstrings.** Public functions have type hints and a Google-style docstring that
   names the symbols from the method document (Δ, *N*, *b*, *q*ₖ) where relevant.
-- **Math stays pure.** Quantization and rebuild functions take arrays and return arrays. File
+- **Math stays pure.** Quantization and rebuild functions take tensors and return tensors. File
   I/O, model loading and networking live in separate modules.
 - **Configuration over constants.** Experiment settings come from config files in `configs/`,
   not from values edited inside scripts.

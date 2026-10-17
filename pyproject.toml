@@ -17,16 +17,15 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+# Install PyTorch first from the index matching your CUDA version (see README).
 dependencies = [
-    "numpy>=2.1",
+    "torch>=2.9",
     "safetensors>=0.5",
 ]
 
 [project.optional-dependencies]
-# Phase 1: quantization sweeps and perplexity evaluation.
-# Install PyTorch first from the index matching your CUDA version (see README).
+# Phase 1: model loading and perplexity evaluation.
 experiments = [
-    "torch>=2.9",
     "transformers>=5.2", # first release with Qwen3.5 (qwen3_5) support
     "accelerate>=1.10",
     "datasets>=3.0",
@@ -56,7 +55,7 @@ packages = ["src/holograph"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers --import-mode=importlib"
 
 [tool.ruff]
 line-length = 100
