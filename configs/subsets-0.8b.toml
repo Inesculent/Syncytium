@@ -1,0 +1,23 @@
+# Every survivor count for N = 4 at 0.8B: each child, every partial rebuild missing one or two
+# children, the full rebuild and round-to-nearest baselines, so the baseline comparison
+# (docs/method.md, "Baselines on the same nodes") has no gaps. The pilot measured all of these
+# except the two-of-four rebuilds, so its overlap with the pilot also checks that results
+# reproduce.
+name = "subsets-0.8b"
+output = "results/subsets-0.8b"
+
+[model]
+path = "Qwen/Qwen3.5-0.8B-Base"
+
+[eval]
+window = 2048
+
+[grid]
+bits = [2, 3, 4]
+group_sizes = [64]
+children = [4]
+phases = [0.0, 0.5]
+rotation = [false, true]
+seed = 0
+max_missing = 2
+rtn_bits = [2, 3, 4, 5, 6, 7, 8]

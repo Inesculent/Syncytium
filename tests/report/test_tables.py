@@ -63,6 +63,18 @@ def test_hypothesis_checks(handmade):
     assert pd.isna(summary.loc[2, "h4"])  # with N = 2 the partial rebuild is one child
 
 
+def test_partial_statistics_ignore_rebuilds_missing_more_than_one_child(tmp_path):
+    rows = [
+        {"id": "bf16", "kind": "bf16", "indices": [], "perplexity": 10.0, "bits_per_weight": 16},
+        row("child", 30.0, (0,), num_children=4),
+        row("rebuild", 11.0, (0, 1, 2, 3), num_children=4),
+        row("partial", 12.0, (0, 1, 2), num_children=4),
+        row("partial", 50.0, (0, 1), num_children=4),
+    ]
+    results = load_results(write_rows(tmp_path / "more.jsonl", rows))
+    assert summarize(results).iloc[0]["partial_worst"] == 12.0
+
+
 def test_markdown_states_the_bf16_reference(handmade):
     text = to_markdown(summarize(handmade), bf16_perplexity(handmade))
     assert text.startswith("bf16 perplexity: **10.000**")

@@ -144,6 +144,39 @@ weights from that stage's surviving children and measures perplexity. Setting th
 the children's mean is equivalent to averaging every linear layer's outputs, so the
 simulation matches the per-layer protocol above.
 
+## Baselines on the same nodes
+
+Staggered children are compared with two simpler ways of giving each of *N* nodes one shard,
+judged by worst-case perplexity when *s* nodes survive and by memory per node:
+
+- *Replicated.* Every node holds the same round-to-nearest model at the children's bit width.
+  It costs the same memory as a child, and its quality does not depend on *s*.
+- *Coded remainder* (*k*). Every node holds the same base child plus one share of what the
+  base lacks from the parent, erasure-coded so that any *k* shares recover it. With child *k*'s
+  code *q*ₖ = ⌊*x* + (*k* + φ)/*N*⌋ and the parent's *Q* = ⌊*N x* + φ⌋, writing
+  *x* + (*k* + φ)/*N* = *q*ₖ + *f* with *f* in [0, 1) gives *Q* − *N q*ₖ = ⌊*N f*⌋ − *k*, one
+  of *N* values. The remainder therefore takes log₂ *N* bits per weight, and each share
+  log₂(*N*)/*k*. Fewer than *k* survivors serve the base child; *k* or more rebuild the parent
+  exactly. With *k* = 1 every node holds the whole parent, which is also what nested
+  (Matryoshka-style) slicing of one stored model amounts to. The base is the child whose
+  offset is closest to ½ (round-to-nearest when φ = 0).
+
+Both baselines are computed from conditions the sweep already measures. Neither can pool:
+coded shares must be decoded before they can be multiplied, and identical replicas add
+nothing by averaging. `syncytium-report` writes the comparison as `baselines.md`.
+
+## Equal memory per node
+
+A node's memory can hold a large model at few bits or a smaller model at more bits, and for
+a single model the second is often better. Staggered children are therefore also compared
+across model sizes at the weight memory of one child: against the best single model of any
+measured size that fits in that memory (bf16 or round-to-nearest at any bit width), with one
+node alive (the worst child) and with the fleet (the worst rebuild from *N* − 1 children, and
+the rebuild from all *N*). Memory counts codes, scales and unquantized tensors, not the
+key/value cache. Parameter counts come from each model's config, built on PyTorch's meta
+device, and are checked against the memory each sweep logged. `syncytium-compare` writes the
+comparison.
+
 ## System design (container demo)
 
 **Roles.** One *main* container serves the parent on the GPU. *N* *child* containers each hold

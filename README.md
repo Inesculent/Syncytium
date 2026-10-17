@@ -99,6 +99,7 @@ An interrupted sweep resumes where it stopped when rerun with the same config.
 
 ```bash
 syncytium-report results/pilot-0.8b        # summary table and figures in docs/results/
+syncytium-compare results/pilot-0.8b results/sweep-4b results/sweep-9b   # sizes at equal memory
 ```
 
 Larger models run on a SLURM cluster; see [running on a cluster](docs/cluster.md).

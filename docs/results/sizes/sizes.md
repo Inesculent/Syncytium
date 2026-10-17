@@ -1,0 +1,40 @@
+Each row is one staggered setting with *N* = 4 children, compared at the weight memory of one child (`node_gb`; codes, scales and unquantized tensors, no key/value cache). `child_worst`: one node alive. `fleet_minus_one`: the worst rebuild from three. `fleet_all`: the rebuild from all four. `best_single`: the best single model of any measured size that fits in the same memory. Models: 0.8B (0.75B parameters, bf16 perplexity 13.125), 4B (4.21B parameters, bf16 perplexity 8.055), 9B (8.95B parameters, bf16 perplexity 6.982). The full table, for every *N*, is in `sizes.csv`.
+
+| model   |   bits |   group_size |   phase | rotation   |   num_children |   node_gb |   child_worst |   fleet_minus_one |   fleet_all | best_single         |   best_single_perplexity |
+|:--------|-------:|-------------:|--------:|:-----------|---------------:|----------:|--------------:|------------------:|------------:|:--------------------|-------------------------:|
+| 0.8B    |      2 |           64 |     0   | off        |              4 |     0.236 |    320413     |            28.406 |      16.464 | 0.8B 2-bit, rotated |                15382.8   |
+| 0.8B    |      2 |           64 |     0   | on         |              4 |     0.236 |     43607.9   |            24.413 |      16.054 | 0.8B 2-bit, rotated |                15382.8   |
+| 0.8B    |      2 |           64 |     0.5 | off        |              4 |     0.236 |     70263.1   |            25.615 |      16.221 | 0.8B 2-bit, rotated |                15382.8   |
+| 0.8B    |      2 |           64 |     0.5 | on         |              4 |     0.236 |     42943.7   |            23.229 |      15.895 | 0.8B 2-bit, rotated |                15382.8   |
+| 0.8B    |      3 |           64 |     0   | off        |              4 |     0.33  |        35.319 |            14.566 |      13.68  | 0.8B 3-bit, rotated |                   25.446 |
+| 0.8B    |      3 |           64 |     0   | on         |              4 |     0.33  |        31.008 |            14.322 |      13.538 | 0.8B 3-bit, rotated |                   25.446 |
+| 0.8B    |      3 |           64 |     0.5 | off        |              4 |     0.33  |        32.012 |            14.408 |      13.562 | 0.8B 3-bit, rotated |                   25.446 |
+| 0.8B    |      3 |           64 |     0.5 | on         |              4 |     0.33  |        27.203 |            14.266 |      13.515 | 0.8B 3-bit, rotated |                   25.446 |
+| 0.8B    |      4 |           64 |     0   | off        |              4 |     0.424 |        15.178 |            13.432 |      13.232 | 0.8B 4-bit, rotated |                   14.661 |
+| 0.8B    |      4 |           64 |     0   | on         |              4 |     0.424 |        14.877 |            13.384 |      13.225 | 0.8B 4-bit, rotated |                   14.661 |
+| 0.8B    |      4 |           64 |     0.5 | off        |              4 |     0.424 |        15.339 |            13.401 |      13.214 | 0.8B 4-bit, rotated |                   14.661 |
+| 0.8B    |      4 |           64 |     0.5 | on         |              4 |     0.424 |        14.849 |            13.34  |      13.199 | 0.8B 4-bit, rotated |                   14.661 |
+| 4B      |      2 |           64 |     0   | off        |              4 |     1.316 |     12904.6   |            10.805 |       8.845 | 0.8B 8-bit, rotated |                   13.13  |
+| 4B      |      2 |           64 |     0   | on         |              4 |     1.316 |      3806.37  |            10.474 |       8.808 | 0.8B 8-bit, rotated |                   13.13  |
+| 4B      |      2 |           64 |     0.5 | off        |              4 |     1.316 |     19237.6   |            10.735 |       8.756 | 0.8B 8-bit, rotated |                   13.13  |
+| 4B      |      2 |           64 |     0.5 | on         |              4 |     1.316 |      4268.54  |            10.177 |       8.7   | 0.8B 8-bit, rotated |                   13.13  |
+| 4B      |      3 |           64 |     0   | off        |              4 |     1.842 |        11.267 |             8.402 |       8.186 | 4B 3-bit, rotated   |                   10.329 |
+| 4B      |      3 |           64 |     0   | on         |              4 |     1.842 |        11.109 |             8.392 |       8.181 | 4B 3-bit, rotated   |                   10.329 |
+| 4B      |      3 |           64 |     0.5 | off        |              4 |     1.842 |        11.074 |             8.402 |       8.178 | 4B 3-bit, rotated   |                   10.329 |
+| 4B      |      3 |           64 |     0.5 | on         |              4 |     1.842 |        10.817 |             8.341 |       8.158 | 4B 3-bit, rotated   |                   10.329 |
+| 4B      |      4 |           64 |     0   | off        |              4 |     2.367 |         8.518 |             8.132 |       8.085 | 4B 4-bit, rotated   |                    8.471 |
+| 4B      |      4 |           64 |     0   | on         |              4 |     2.367 |         8.486 |             8.125 |       8.084 | 4B 4-bit, rotated   |                    8.471 |
+| 4B      |      4 |           64 |     0.5 | off        |              4 |     2.367 |         8.509 |             8.126 |       8.078 | 4B 4-bit, rotated   |                    8.471 |
+| 4B      |      4 |           64 |     0.5 | on         |              4 |     2.367 |         8.465 |             8.116 |       8.074 | 4B 4-bit, rotated   |                    8.471 |
+| 9B      |      2 |           64 |     0   | off        |              4 |     2.8   |     24442.5   |             9.514 |       7.631 | 4B 4-bit, rotated   |                    8.471 |
+| 9B      |      2 |           64 |     0   | on         |              4 |     2.8   |      5908.51  |             8.91  |       7.528 | 4B 4-bit, rotated   |                    8.471 |
+| 9B      |      2 |           64 |     0.5 | off        |              4 |     2.8   |     52286.9   |             9.007 |       7.524 | 4B 4-bit, rotated   |                    8.471 |
+| 9B      |      2 |           64 |     0.5 | on         |              4 |     2.8   |      6219.66  |             8.732 |       7.562 | 4B 4-bit, rotated   |                    8.471 |
+| 9B      |      3 |           64 |     0   | off        |              4 |     3.919 |         9.874 |             7.256 |       7.082 | 4B 6-bit, rotated   |                    8.07  |
+| 9B      |      3 |           64 |     0   | on         |              4 |     3.919 |         9.807 |             7.241 |       7.079 | 4B 6-bit, rotated   |                    8.07  |
+| 9B      |      3 |           64 |     0.5 | off        |              4 |     3.919 |         9.608 |             7.237 |       7.078 | 4B 6-bit, rotated   |                    8.07  |
+| 9B      |      3 |           64 |     0.5 | on         |              4 |     3.919 |         9.272 |             7.246 |       7.078 | 4B 6-bit, rotated   |                    8.07  |
+| 9B      |      4 |           64 |     0   | off        |              4 |     5.038 |         7.398 |             7.045 |       7.006 | 9B 4-bit, rotated   |                    7.298 |
+| 9B      |      4 |           64 |     0   | on         |              4 |     5.038 |         7.344 |             7.041 |       7.005 | 9B 4-bit, rotated   |                    7.298 |
+| 9B      |      4 |           64 |     0.5 | off        |              4 |     5.038 |         7.371 |             7.035 |       7     | 9B 4-bit, rotated   |                    7.298 |
+| 9B      |      4 |           64 |     0.5 | on         |              4 |     5.038 |         7.335 |             7.038 |       7     | 9B 4-bit, rotated   |                    7.298 |

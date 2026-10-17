@@ -37,8 +37,15 @@ def bf16_perplexity(results: pd.DataFrame) -> float:
 
 
 def summarize(results: pd.DataFrame) -> pd.DataFrame:
-    """One row per setting with child, rebuild and partial-rebuild statistics."""
-    by_kind = {kind: results[results["kind"] == kind].groupby(SETTING) for kind in KINDS}
+    """One row per setting with child, rebuild and partial-rebuild statistics.
+
+    Partial-rebuild statistics cover rebuilds missing exactly one child, the case H4 judges,
+    even when the log also holds rebuilds with more children missing.
+    """
+    frames = {kind: results[results["kind"] == kind] for kind in KINDS}
+    partial = frames["partial"]
+    frames["partial"] = partial[partial["present"] == partial["num_children"] - 1]
+    by_kind = {kind: frame.groupby(SETTING) for kind, frame in frames.items()}
     summary = pd.concat(
         [
             by_kind["child"]["perplexity"].agg(

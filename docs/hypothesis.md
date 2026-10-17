@@ -136,6 +136,10 @@ with a timestamp.
 4. Every rebuild with one child missing, and a sample of rebuilds with more missing
 5. Standard round-to-nearest quantization at the child's and the rebuild's bit width
 6. GPTQ or AWQ at the child's bit width (reference point)
+7. The same nodes holding identical round-to-nearest models, or a base child plus an
+   erasure-coded remainder (see [method](method.md#baselines-on-the-same-nodes)), by surviving
+   nodes. Added on 2026-10-17 after the 0.8B pilot was examined, as an exploratory comparison
+   with no threshold.
 
 ## What results would mean
 

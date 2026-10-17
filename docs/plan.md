@@ -14,6 +14,7 @@ own. Decisions taken while planning are recorded at the end.
 | 1.5 Shared rotation | Block-diagonal randomized Hadamard transform with block size equal to the group size. Test that the rebuild identity still holds. | `src/syncytium/quant/` |
 | 1.6 Pilot and sweep | Report module (summary table with H3/H4 checks, recovery, Pareto and offset figures) and SLURM scripts. 0.8B pilot; fix the usable-child threshold in the hypothesis document; run 2B (locally or on the cluster), and 4B and 9B on the cluster (4B's bf16 weights alone exceed a 10 GB GPU); write-up. | `src/syncytium/report/`, `slurm/`, `docs/results/` |
 | 1.7 Pooled pipeline | Stages of the parent held by *N* devices with one child each; a stage averages its live devices' outputs, which with all alive equals the parent exactly. `syncytium-pool` evaluates every single-device loss, every stage on one child, and random loss patterns with their per-stage components, under the mean and midpoint estimators; the summary checks H6b and H6c. Run at 0.8B, then 2B. | `src/syncytium/pool/`, `configs/pool-*.toml` |
+| 1.8 Baselines | Staggered children against the same model on every node and against a base child plus an erasure-coded remainder, by surviving nodes and memory per node (see [method](method.md#baselines-on-the-same-nodes)); computed from sweep logs by `syncytium-report`. Model sizes compared at equal memory per node (see [method](method.md#equal-memory-per-node)) by `syncytium-compare`. `configs/subsets-0.8b.toml` measures every survivor count for *N* = 4 at 0.8B, including the two-of-four rebuilds the pilot lacks (about 1.6 h). | `src/syncytium/report/`, `configs/` |
 
 ## Phase 2: Container demo
 
@@ -60,6 +61,32 @@ candidate follow-up.
 - **Unusable children can still rebuild a usable parent.** Four 2-bit children each score a
   perplexity above 10,000, yet their rebuild scores 15.5–15.9. Children carry the parent's
   information even when they cannot serve on their own.
+- **3-bit children become usable from 4B** (stage 1.6, 4B and 9B sweeps). The worst 3-bit
+  child is 1.31–1.40x bf16 at 4B and 1.32–1.41x at 9B, against 1.97–2.70x at 0.8B, so every
+  3-bit setting passes H2 at both sizes; the ratio does not improve further from 4B to 9B.
+  4-bit children are 1.05–1.06x at both. 2-bit children stay unusable, but eight of them
+  rebuild to within 0.19 of bf16 at 4B and 0.15 at 9B; four fall short of H3 (0.54–0.79).
+  H4 holds in every setting at every size. 2B has not run: both cluster attempts failed at
+  CUDA initialization (error 101), before the model loaded.
+- **Combining matters most at 3 bits.** At 9B (N = 4, rotation, φ = ½), combining takes the
+  worst 3-bit child from 9.27 to 7.08 (bf16 6.98), but the worst 4-bit child only from 7.34 to
+  7.00. With three of four alive, 3-bit staggered children (7.25) beat 4-bit round-to-nearest
+  on every node (7.30), which costs one more bit per node; the same holds at 4B (8.34 against
+  8.47).
+- **The fleet beats any single model that fits on one node** (stage 1.8, 0.8B, 4B and 9B,
+  N = 4). In every 3- and 4-bit setting, any three of four children rebuild a better model
+  than the best single model of any measured size that fits in one child's memory. At 9B with
+  3-bit children (3.9 GB per node), three of four give 7.25 and all four 7.08, against 8.07
+  for the best single fit (4B at 6 bits). One node alone is worse than that best fit: by 0.5–
+  0.9 perplexity for 3-bit children at 4B and 1.2–1.8 at 9B, but at most 0.1 for 4-bit
+  children at 4B and 9B. Without 2B, the comparison has no model between 0.8B and 4B.
+- **Neither baseline dominates** (stage 1.8, 0.8B pilot, N = 4; the same pattern at 4B and 9B). With one node left, the
+  same 4-bit model on every node is slightly better than the worst staggered child (14.66
+  against 14.85 with rotation and φ = ½). With three of four, staggered children score 13.34,
+  and the replicated model needs about 2 more bits per node to match them; the coded
+  remainder rebuilds the parent (13.20) from any three for 0.67 more bits per node. With all
+  four, staggered matches the coded scheme at no extra memory. Two survivors, where staggered
+  should win most clearly, were not measured in the pilot.
 - **Open question: rotation block size.** The rotation currently mixes values only within one
   quantization group. Larger blocks spread outliers further and may help low-bit children
   more; a candidate ablation once the pilot is in.
