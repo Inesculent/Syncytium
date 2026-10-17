@@ -33,25 +33,24 @@ def all_figures(results: pd.DataFrame) -> dict[str, Figure]:
     """Every figure for a results frame, keyed by file name (without extension)."""
     figures = {"offsets": offsets_figure(results)}
     baselines = has_baselines(results)
-    for phase, rotation in _settings(results):
-        suffix = f"p{phase:g}-rot-{rotation}"
-        figures[f"recovery-{suffix}"] = recovery_figure(results, phase, rotation)
-        figures[f"pareto-{suffix}"] = pareto_figure(results, phase, rotation)
+    for variant in _settings(results):
+        suffix = _suffix(*variant)
+        figures[f"recovery-{suffix}"] = recovery_figure(results, *variant)
+        figures[f"pareto-{suffix}"] = pareto_figure(results, *variant)
         if baselines:
-            figures[f"baselines-{suffix}"] = baseline_figure(results, phase, rotation)
+            figures[f"baselines-{suffix}"] = baseline_figure(results, *variant)
     return figures
 
 
 def sizes_figures(sweeps: list[Sweep]) -> dict[str, Figure]:
-    """The equal-memory figure for each phase and rotation the sweeps share."""
+    """The equal-memory figure for each phase, rotation and scaling the sweeps share."""
     shared = set.intersection(*(set(_settings(s.results)) for s in sweeps))
     return {
-        f"sizes-p{phase:g}-rot-{rotation}": sizes_figure(sweeps, phase, rotation)
-        for phase, rotation in sorted(shared)
+        f"sizes-{_suffix(*variant)}": sizes_figure(sweeps, *variant) for variant in sorted(shared)
     }
 
 
-def sizes_figure(sweeps: list[Sweep], phase: float, rotation: str) -> Figure:
+def sizes_figure(sweeps: list[Sweep], phase: float, rotation: str, scaling: str = "off") -> Figure:
     """Perplexity against weight memory per node, across model sizes.
 
     The step line is the best single model that fits in each amount of memory. Each 3- or
@@ -66,6 +65,7 @@ def sizes_figure(sweeps: list[Sweep], phase: float, rotation: str) -> Figure:
         (table["num_children"] == n)
         & (table["phase"] == phase)
         & (table["rotation"] == rotation)
+        & (table["scaling"] == scaling)
         & (table["bits"] >= 3)
     ]
     figure, (axis,) = _panels(1)
@@ -120,7 +120,9 @@ def has_baselines(results: pd.DataFrame) -> bool:
     return bool((results["num_children"] == BASELINE_CHILDREN).any())
 
 
-def baseline_figure(results: pd.DataFrame, phase: float, rotation: str) -> Figure:
+def baseline_figure(
+    results: pd.DataFrame, phase: float, rotation: str, scaling: str = "off"
+) -> Figure:
     """Worst-case perplexity against surviving nodes: staggered children and two baselines.
 
     One panel per bit width, for N = ``BASELINE_CHILDREN``. The coded baseline rebuilds the
@@ -129,7 +131,10 @@ def baseline_figure(results: pd.DataFrame, phase: float, rotation: str) -> Figur
     n, k = BASELINE_CHILDREN, BASELINE_CHILDREN - 1
     data = compare(results)
     data = data[
-        (data["phase"] == phase) & (data["rotation"] == rotation) & (data["num_children"] == n)
+        (data["phase"] == phase)
+        & (data["rotation"] == rotation)
+        & (data["scaling"] == scaling)
+        & (data["num_children"] == n)
     ]
     panels = sorted(data["bits"].unique())
     figure, axes = _panels(len(panels))
@@ -159,9 +164,11 @@ def baseline_figure(results: pd.DataFrame, phase: float, rotation: str) -> Figur
     return figure
 
 
-def recovery_figure(results: pd.DataFrame, phase: float, rotation: str) -> Figure:
+def recovery_figure(
+    results: pd.DataFrame, phase: float, rotation: str, scaling: str = "off"
+) -> Figure:
     """Perplexity against the number of children present, one panel per bit width."""
-    data = _select(results, phase, rotation)
+    data = _select(results, phase, rotation, scaling)
     data = data[data["kind"].isin(KINDS)]
     panels = sorted(data["bits"].unique())
     figure, axes = _panels(len(panels))
@@ -172,10 +179,12 @@ def recovery_figure(results: pd.DataFrame, phase: float, rotation: str) -> Figur
     return figure
 
 
-def pareto_figure(results: pd.DataFrame, phase: float, rotation: str) -> Figure:
+def pareto_figure(
+    results: pd.DataFrame, phase: float, rotation: str, scaling: str = "off"
+) -> Figure:
     """Perplexity against bits per weight: round-to-nearest, single children and rebuilds."""
-    data = _select(results, phase, rotation)
-    rtn = results[(results["kind"] == "rtn") & (results["rotation"] == rotation)]
+    data = _select(results, phase, rotation, scaling)
+    rtn = _select(results[results["kind"] == "rtn"], None, rotation, scaling)
     figure, (axis,) = _panels(1)
     series = [
         ("round-to-nearest", rtn.sort_values("bits_per_weight"), "-"),
@@ -192,8 +201,11 @@ def pareto_figure(results: pd.DataFrame, phase: float, rotation: str) -> Figure:
 
 
 def offsets_figure(results: pd.DataFrame) -> Figure:
-    """Perplexity of each child against its grid offset, one panel per bit width."""
-    children = results[results["kind"] == "child"].copy()
+    """Perplexity of each child against its grid offset, one panel per bit width.
+
+    Only unscaled children are shown, so each curve is one rotation setting.
+    """
+    children = results[(results["kind"] == "child") & (results["scaling"] == "off")].copy()
     children["offset"] = children["offsets"].map(lambda o: float(Fraction(o[0])))
     panels = sorted(children["bits"].unique())
     figure, axes = _panels(len(panels))
@@ -241,13 +253,25 @@ def _bridged(axis: Axes, curve: pd.Series, slot: int, label: str | None = None) 
     axis.plot([], [], **_mark(slot), label=label)
 
 
-def _select(results: pd.DataFrame, phase: float, rotation: str) -> pd.DataFrame:
-    return results[(results["phase"] == phase) & (results["rotation"] == rotation)]
+def _select(
+    results: pd.DataFrame, phase: float | None, rotation: str, scaling: str
+) -> pd.DataFrame:
+    """Rows of one variant; ``phase`` ``None`` keeps every phase."""
+    chosen = (results["rotation"] == rotation) & (results["scaling"] == scaling)
+    if phase is not None:
+        chosen &= results["phase"] == phase
+    return results[chosen]
+
+
+def _suffix(phase: float, rotation: str, scaling: str) -> str:
+    """File name suffix of a variant; unscaled names predate scaling and stay unchanged."""
+    return f"p{phase:g}-rot-{rotation}" + ("-scaled" if scaling == "on" else "")
 
 
 def _settings(results: pd.DataFrame) -> list[tuple[float, str]]:
     staggered = results[results["kind"].isin(KINDS)]
-    return sorted(set(zip(staggered["phase"], staggered["rotation"], strict=True)))
+    columns = (staggered["phase"], staggered["rotation"], staggered["scaling"])
+    return sorted(set(zip(*columns, strict=True)))
 
 
 def _panels(count: int) -> tuple[Figure, list[Axes]]:

@@ -15,6 +15,8 @@ class Scheme:
         num_children: Number of children, N.
         phase: Offset phase φ; child k uses offset (k + φ)/N.
         rotation_seed: Seed of the shared group rotation, or ``None`` for no rotation.
+        scaling: Whether input channels are scaled by searched activation-aware scales
+            before quantization (see :mod:`syncytium.quant.scaling`).
     """
 
     bits: int
@@ -22,6 +24,7 @@ class Scheme:
     num_children: int
     phase: float = 0.0
     rotation_seed: int | None = None
+    scaling: bool = False
 
     def __post_init__(self) -> None:
         if not 1 <= self.bits <= MAX_BITS:

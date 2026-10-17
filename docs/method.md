@@ -97,6 +97,29 @@ original basis the error of each group is bounded in Euclidean norm by √*g* ti
 per-weight bound. Because *R* acts within a group, it needs no power-of-two model dimension. In phase 1 it is simulated by dequantizing in
 PyTorch; running rotated children efficiently needs kernel support that stock llama.cpp lacks.
 
+## Optional channel scaling
+
+Before quantization, input channel *c* of a weight can be multiplied by a scale *s*_c and the
+dequantized weight divided by it again, as in AWQ: channels that see large activations are
+rounded relatively more finely. As with the rotation, every child uses the same scales and
+the transform is linear, so the rebuild identity still holds. Channel scaling and the
+rotation can be combined; the weight is scaled first and rotated within groups after.
+
+The scales are *s* = *a*^α, normalized so that max(*s*) · min(*s*) = 1, where *a*_c is the
+root mean square of input channel *c* on calibration text (64 windows of 512 tokens from the
+WikiText-2 train split, never the test split that perplexity is measured on). α is chosen
+per weight from 0, 0.05, …, 1 to minimize the activation-weighted squared error
+Σ_c E[*x*_c²] Σ_r (*ŵ*_rc − *w*_rc)² of the round-to-nearest child at the children's bit
+width. This is a diagonal approximation of the layer's output error, cheaper than AWQ's
+search over stored activations. α = 0 is no scaling, so the search never does worse than the
+unscaled weight on this objective. The scales do not depend on *N* or φ, so every set of
+children at one bit width shares them, and scaled round-to-nearest models serve as an
+AWQ-style single-model baseline.
+
+Stored as fp16, the scales add under 0.006 bits per weight over a whole model (at most 1 bit
+per weight for the smallest layer), so they are not counted in the memory figures. Shards
+cannot store them yet; `syncytium-shard` refuses scaled schemes.
+
 ## Memory accounting
 
 Bits per weight for a child are *b* + 32/*g* when *m* and Δ are stored as fp16 per group:

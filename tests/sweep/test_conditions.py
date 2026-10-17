@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from syncytium.quant import Scheme, simulate_child, simulate_rebuild
@@ -81,6 +82,47 @@ def test_transforms_apply_the_right_simulation(groups):
     weight = groups.reshape(64, 512)
     scheme = Scheme(3, 64, 4)
     assert Condition(Kind.BF16).transform() is None
-    assert torch.equal(child(4, 1, bits=3).transform()(weight), simulate_child(weight, scheme, 1))
-    partial = Condition(Kind.PARTIAL, scheme, (0, 2, 3)).transform()(weight)
+    simulated = child(4, 1, bits=3).transform()("w", weight)
+    assert torch.equal(simulated, simulate_child(weight, scheme, 1))
+    partial = Condition(Kind.PARTIAL, scheme, (0, 2, 3)).transform()("w", weight)
     assert torch.equal(partial, simulate_rebuild(weight, scheme, (0, 2, 3)))
+
+
+def scaled(n, k):
+    return Condition(Kind.CHILD, Scheme(4, 64, n, scaling=True), (k,))
+
+
+def test_scaling_is_part_of_the_key_and_id():
+    assert scaled(4, 1).key != child(4, 1).key
+    assert scaled(4, 1).key == scaled(8, 2).key  # nesting still holds within scaled sets
+    assert scaled(4, 1).id == "child/b4-g64-n4-p0-s/k1"
+
+
+def test_plan_adds_scaled_settings_and_baselines():
+    conditions = plan(grid(scaling=(False, True), rtn_bits=(4,)))
+    scaled_ones = [c for c in conditions if c.scheme and c.scheme.scaling]
+    assert len(scaled_ones) == (len(conditions) - 1) // 2
+    assert any(c.kind == Kind.RTN for c in scaled_ones)
+
+
+def test_scaled_transforms_use_the_weights_own_scales(groups):
+    weight = groups.reshape(64, 512)
+    factors = torch.linspace(0.5, 2.0, 512, dtype=weight.dtype)
+    calls = []
+
+    def scales(name, w, scheme):
+        calls.append((name, scheme.scaling))
+        return factors
+
+    simulated = scaled(4, 1).transform(scales)("layer.weight", weight)
+    expected = simulate_child(weight, Scheme(4, 64, 4, scaling=True), 1, factors)
+    assert torch.equal(simulated, expected)
+    assert calls == [("layer.weight", True)]
+    unscaled = child(4, 1).transform(scales)("layer.weight", weight)
+    assert torch.equal(unscaled, simulate_child(weight, Scheme(4, 64, 4), 1))
+    assert len(calls) == 1  # unscaled conditions never ask for scales
+
+
+def test_scaled_transform_needs_calibration():
+    with pytest.raises(ValueError, match="calibration"):
+        scaled(4, 1).transform()

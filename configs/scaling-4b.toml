@@ -1,0 +1,23 @@
+# Channel scaling at 4B (stage 1.9): staggered children with and without activation-aware
+# channel scales, with round-to-nearest baselines scaled and unscaled at every bit width (the
+# scaled ones are the AWQ-style single models). N = 4 and φ = ½, the setting used throughout
+# the comparisons; unscaled settings are included so the log is self-contained.
+name = "scaling-4b"
+output = "results/scaling-4b"
+
+[model]
+path = "Qwen/Qwen3.5-4B-Base"
+
+[eval]
+window = 2048
+
+[grid]
+bits = [2, 3, 4]
+group_sizes = [64]
+children = [4]
+phases = [0.5]
+rotation = [false, true]
+scaling = [false, true]
+seed = 0
+max_missing = 1
+rtn_bits = [2, 3, 4, 5, 6, 7, 8]

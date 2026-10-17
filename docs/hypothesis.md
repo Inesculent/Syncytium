@@ -140,6 +140,10 @@ with a timestamp.
    erasure-coded remainder (see [method](method.md#baselines-on-the-same-nodes)), by surviving
    nodes. Added on 2026-10-17 after the 0.8B pilot was examined, as an exploratory comparison
    with no threshold.
+8. Children and round-to-nearest models with activation-aware channel scaling (see
+   [method](method.md#optional-channel-scaling)), the strongest quantizer that keeps the
+   rebuild exact. Added on 2026-10-17 after the 4B and 9B sweeps were examined, as an
+   exploratory comparison with no threshold.
 
 ## What results would mean
 

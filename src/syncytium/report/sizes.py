@@ -106,13 +106,17 @@ def single_models(sweeps: Sequence[Sweep]) -> pd.DataFrame:
             dense = row["kind"] == "bf16"
             bits = DENSE_BITS if dense else int(row["bits"])
             group_size = 0 if dense else int(row["group_size"])
-            rotated = not dense and row["rotation"] == "on"
-            name = "bf16" if dense else f"{bits}-bit" + (", rotated" if rotated else "")
+            name = "bf16" if dense else f"{bits}-bit"
+            if not dense and row["rotation"] == "on":
+                name += ", rotated"
+            if not dense and row["scaling"] == "on":
+                name += ", scaled"
             rows.append(
                 {
                     "model": sweep.label,
                     "bits": bits,
                     "rotation": None if dense else row["rotation"],
+                    "scaling": None if dense else row["scaling"],
                     "node_gb": sweep.node_gb(bits, group_size),
                     "perplexity": row["perplexity"],
                     "label": f"{sweep.label} {name}",
@@ -174,7 +178,9 @@ def to_markdown(table: pd.DataFrame, sweeps: Sequence[Sweep]) -> str:
         f"of any measured size that fits in the same memory. Models: {models}. The full table, "
         "for every *N*, is in `sizes.csv`.\n\n"
     )
-    rows = table[table["num_children"] == 4].sort_values(["node_gb", "phase", "rotation"])
+    rows = table[table["num_children"] == 4].sort_values(
+        ["node_gb", "phase", "rotation", "scaling"]
+    )
     return intro + rows.round(3).to_markdown(index=False) + "\n"
 
 

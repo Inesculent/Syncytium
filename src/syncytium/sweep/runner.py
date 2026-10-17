@@ -22,8 +22,15 @@ from syncytium.eval import (
     perplexity,
     windows,
 )
-from syncytium.models import WeightBank, load_model, load_tokenizer, quantized_weights
-from syncytium.quant import Scheme
+from syncytium.models import (
+    WeightBank,
+    input_moments,
+    load_model,
+    load_tokenizer,
+    missing_moments,
+    quantized_weights,
+)
+from syncytium.quant import ChannelScales, Scheme
 from syncytium.sweep.conditions import Condition, Kind, plan
 from syncytium.sweep.config import SweepConfig
 from syncytium.sweep.records import ResultLog, append_run_metadata
@@ -35,16 +42,39 @@ def run_sweep(config: SweepConfig, config_path: Path) -> None:
     """Load the model and corpus named in ``config`` and evaluate its grid."""
     append_run_metadata(config.output / "runs.jsonl", config_path)
     model = load_model(config.model.path, config.model.device, getattr(torch, config.model.dtype))
-    ids = load_wikitext2(load_tokenizer(config.model.path))
-    batches = windows(ids, config.evaluation.window, config.evaluation.max_windows)
+    tokenizer = load_tokenizer(config.model.path)
+    evaluation = config.evaluation
+    batches = windows(load_wikitext2(tokenizer), evaluation.window, evaluation.max_windows)
     log = ResultLog(config.output / "results.jsonl")
-    run_conditions(plan(config.grid), model, batches, log)
+    conditions = plan(config.grid)
+    scales = None
+    if any(c.scheme is not None and c.scheme.scaling for c in conditions):
+        train = load_wikitext2(tokenizer, split="train")
+        calibration = windows(train, evaluation.calibration_window, evaluation.calibration_windows)
+        scales = calibrate(model, calibration)
+    run_conditions(conditions, model, batches, log, scales)
+
+
+def calibrate(model: PreTrainedModel, batches: Tensor) -> ChannelScales:
+    """Channel scales from the unquantized model's activations on ``batches``."""
+    moments = input_moments(model, batches)
+    count, length = batches.shape
+    unscaled = missing_moments(moments, model) or "none"
+    logger.info("calibrated on %d windows of %d tokens; unscaled: %s", count, length, unscaled)
+    return ChannelScales(moments)
 
 
 def run_conditions(
-    conditions: Sequence[Condition], model: PreTrainedModel, batches: Tensor, log: ResultLog
+    conditions: Sequence[Condition],
+    model: PreTrainedModel,
+    batches: Tensor,
+    log: ResultLog,
+    scales: ChannelScales | None = None,
 ) -> None:
-    """Evaluate ``conditions``, skipping ones already logged and reusing equal-key results."""
+    """Evaluate ``conditions``, skipping ones already logged and reusing equal-key results.
+
+    ``scales`` are needed when a condition scales its channels (see :func:`calibrate`).
+    """
     weights = quantized_weights(model)
     bank = WeightBank(weights)
     counts = count_parameters(model, weights)
@@ -55,7 +85,7 @@ def run_conditions(
             continue
         source = by_key.get(condition.key)
         if source is None:
-            row = _evaluate(condition, bank, model, batches, counts)
+            row = _evaluate(condition, bank, model, batches, counts, scales)
             by_key[condition.key] = row
         else:
             row = _row(condition, source["perplexity"], 0.0, counts, reused_from=source["id"])
@@ -69,13 +99,14 @@ def _evaluate(
     model: PreTrainedModel,
     batches: Tensor,
     counts: ParameterCounts,
+    scales: ChannelScales | None,
 ) -> dict[str, Any]:
     start = time.perf_counter()
-    transform = condition.transform()
+    transform = condition.transform(scales)
     if transform is None:
         bank.restore()
     else:
-        bank.apply(transform)
+        bank.apply_named(transform)
     value = perplexity(model, batches)
     return _row(condition, value, time.perf_counter() - start, counts, reused_from=None)
 

@@ -20,11 +20,11 @@ has not run.*
   (3.9 GB per node), three of four give 7.25 and four give 7.08; the best model that fits in
   3.9 GB is 4B at 6 bits, at 8.07.
 - **The price is paid by the last node standing.** With one node left, a staggered child is
-  slightly worse than the round-to-nearest (RTN) model of the same size: by at most 0.05 at
-  4 bits (4B and 9B), but by 0.3–1.8 at 3 bits once the alternative of a smaller model at
-  more bits is counted.
+  slightly worse than the round-to-nearest (RTN) model of the same size: by at most 0.04 at
+  4 bits with φ = ½ (4B and 9B), but by 0.5–1.8 at 3 bits once the alternative of a smaller
+  model at more bits is counted.
 - **For phase 2:** the 4-bit children the container demo can export are the setting where
-  the solo fallback is nearly free (within 0.04–0.05 of RTN at 4B and 9B) but where pooling
+  the solo fallback is nearly free (within 0.04 of RTN at 4B and 9B) but where pooling
   and rebuilding gain least. The setting where combining matters most, 3 bits, is not
   servable by llama.cpp. This shapes the router's policy and which modes the demo can show
   convincingly; see [implications for phase 2](#implications-for-phase-2-the-orchestrated-system).
@@ -75,9 +75,9 @@ extrapolated without more sizes.
 ### H2a: rotation helps low-bit children — holds for children, not rebuilds
 
 The shared Hadamard rotation lowers the worst 3-bit child at every size (0.8B 32.0 → 27.2,
-4B 11.07 → 10.82, 9B 9.61 → 9.27, all at φ = ½) and the 2-bit children by 3–10x (still
-unusable). At 4 bits it moves children by 0.01–0.05 at 4B and 9B. Full rebuilds move by
-similar small amounts in either direction. At 4B and 9B, 3-bit children pass H2 *without*
+4B 11.07 → 10.82, 9B 9.61 → 9.27, all at φ = ½) and the worst 2-bit child by up to 8x
+(still unusable). At 4 bits it moves the worst child by 0.03–0.05 at 4B and 9B. Full
+rebuilds move by similar small amounts in either direction. At 4B and 9B, 3-bit children pass H2 *without*
 rotation, so rotation is a refinement there rather than an enabler. φ = ½ with rotation gives
 the best worst-child in most settings.
 
@@ -105,8 +105,9 @@ floor of a few thousandths, consistent with the rebuild's error falling as 1/*N*
 ### H4: graceful degradation — holds in every tested setting
 
 For every *N* ≥ 4 setting at every size, the worst rebuild from *N* − 1 children beats the
-best single child. Losing one of four children costs, at 9B: 0.04 (4-bit), 0.17 (3-bit) and
-1.2 (2-bit) perplexity; losing one of eight costs at most 0.01, 0.02 and 0.12. **Caveat:**
+best single child. At 9B with φ = ½ and rotation, losing one of four children costs 0.04
+(4-bit), 0.17 (3-bit) and 1.2 (2-bit) perplexity; losing one of eight costs 0.01, 0.02 and
+0.12. **Caveat:**
 only one missing child was measured (`max_missing = 1`). Monotonicity beyond one loss, and
 two-of-four rebuilds in particular, are untested; `configs/subsets-0.8b.toml` exists for this
 but has not run.
@@ -134,7 +135,7 @@ Worst-case perplexity with *s* of 4 nodes alive, 9B, φ = ½ with rotation
 |--------|--------------------:|------:|------:|------:|------:|------:|------:|
 | Staggered children | 0 | 9.27 | **7.25** | **7.08** | 7.34 | **7.04** | **7.00** |
 | Same RTN model on every node | 0 | **8.92** | 8.92 | 8.92 | **7.30** | 7.30 | 7.30 |
-| Base child + coded remainder, *k* = 3 | +0.67 bpw | 8.92 | 7.08 | 7.08 | 7.30 | 7.00 | 7.00 |
+| Base child + coded remainder, *k* = 3 | +0.67 bpw | 9.11 | 7.08 | 7.08 | 7.32 | 7.00 | 7.00 |
 
 - **Replication** wins only with one node left. With three of four, it needs about 2 more
   bits per node to match staggered children.
@@ -160,8 +161,8 @@ At the weight memory of one child, compared with the best single model of any me
 | 9B, 4-bit | 5.04 GB | 7.34 | 7.04 | 7.00 | 7.30 (9B 4-bit) |
 
 In every 3- and 4-bit setting at every size, any three of four children beat the best single
-fit. The single surviving node falls behind it by 0.5–0.9 (3-bit, 4B) and 1.2–1.8 (3-bit,
-9B), but by at most about 0.05 at 4 bits. With no 2B model, there is no candidate between
+fit. Over all four (φ, rotation) settings, the single surviving node falls behind it by
+0.5–0.9 (3-bit, 4B) and 1.2–1.8 (3-bit, 9B), but by at most 0.1 at 4 bits. With no 2B model, there is no candidate between
 0.8B and 4B, which flatters the 0.8B rows; the 9B 2-bit fleet is the clearest case of nodes
 jointly running a model none of them could serve alone.
 
@@ -216,7 +217,7 @@ The phase 1 results translate into concrete inputs and constraints for that laye
 ### 1. The router has a quality ladder it can rely on
 
 Every state the orchestrator can be in now has a measured quality. At 9B, 4-bit children,
-*N* = 4 (4B in brackets):
+*N* = 4, φ = ½ with rotation (4B in brackets):
 
 | Serving state | Perplexity | Gap to bf16 |
 |---------------|-----------:|------------:|
@@ -257,9 +258,9 @@ containerized children are **4-bit, unrotated, *g* = 32** (Q4_1). Phase 1 says t
 little for solo serving (rotation is worth hundredths at 4 bits), but it also means the demo
 shows the scheme where combining adds least. Options, in order of effort:
 
-- Accept it, and state that 4-bit is the "cheap insurance" configuration: solo children are
-  within 0.04–0.05 of a dedicated RTN deployment of the same size, and the rebuild is a
-  bonus.
+- Accept it, and state that 4-bit is the "cheap insurance" configuration: with φ = ½,
+  unrotated solo children are within 0.04 of an unrotated RTN model of the same size (4B
+  8.51 against 8.48, 9B 7.37 against 7.33), and the rebuild is a bonus.
 - Run the pooled PyTorch workers (stages 2.4 and 2.7) with **3-bit** children, which do not
   depend on llama.cpp. That shows the regime where the fleet clearly beats any single node
   (9B: 7.25 with three of four against 8.07 for the best single fit), at the cost of a slow
@@ -275,8 +276,9 @@ The 0.8B model is the weakest case in every table (4-bit children 1.12–1.17x, 
 unusable, and the "best single fit" comparison is flattered by the missing 2B). A 0.8B demo
 proves the mechanics of kill, wipe and rebuild; quality claims should cite 4B or 9B. A 4B
 demo needs about 2.6 GB per 4-bit *g* = 32 child (four children, about 10.5 GB of CPU
-memory in total) and a main container that can serve the 8.4 GB bf16 parent, which the
-10 GB local GPU cannot do comfortably; the cluster or a quantized main is needed for that.
+memory in total) and a main container that can serve the bf16 parent (8.4 GB of weights
+alone), which the 10 GB local GPU cannot do with room to spare; the cluster or a quantized
+main is needed for that.
 
 ### 5. Predictable degradation enables quality-aware health reporting
 
@@ -290,8 +292,8 @@ reports deterministically; the agent layer only decides which model answers.
 ### 6. What phase 2 must measure that phase 1 could not
 
 - Time to detect a failure, to fail over, and to rebuild, on real low-bit weights. Stage 2.1
-  rebuilds the 0.8B set in about 13 s on CPU with a 3.8 GB peak; 4B and 9B sets are roughly
-  5x and 12x larger, so rebuild time should be measured, not assumed.
+  rebuilds the 0.8B set in about 13 s on CPU with a 3.8 GB peak; 4B and 9B sets are about
+  6x and 12x larger, so rebuild time should be measured, not assumed.
 - Pooled mode's bytes per token and tokens per second against solo, and total compute per
   token across nodes.
 - Task-level quality through the agent layer before, during and after a failure, since

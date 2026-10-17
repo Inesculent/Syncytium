@@ -59,17 +59,20 @@ def compare(results: pd.DataFrame) -> pd.DataFrame:
     """
     share = quantized_share(results)
     rtn = results[results["kind"] == "rtn"]
-    replicated = rtn.groupby(["bits", "group_size", "rotation"])["perplexity"].first()
+    replicated = rtn.groupby(["bits", "group_size", "rotation", "scaling"])["perplexity"].first()
     staggered = results[results["kind"].isin(KINDS)]
     rows = []
     for setting, data in staggered.groupby(SETTING):
-        bits, group_size, _, rotation, n = setting
+        values = dict(zip(SETTING, setting, strict=True))
+        n = values["num_children"]
         children = data[data["kind"] == "child"]
         node_bpw = float(children["bits_per_weight"].iloc[0])
         worst = data.groupby("present")["perplexity"].max()
         rebuild = float(data.loc[data["kind"] == "rebuild", "perplexity"].iloc[0])
         base = _base_child(children)
-        same = replicated.get((bits, group_size, rotation), math.nan)
+        same = replicated.get(
+            tuple(values[key] for key in ("bits", "group_size", "rotation", "scaling")), math.nan
+        )
         for s in range(1, n + 1):
             rows.append([*setting, "staggered", None, s, worst.get(s, math.nan), node_bpw])
             rows.append([*setting, "replicated", None, s, same, node_bpw])
@@ -130,6 +133,7 @@ def _replicated_match(rtn: pd.DataFrame, row: dict, share: float) -> float:
     candidates = rtn[
         (rtn["group_size"] == row["group_size"])
         & (rtn["rotation"] == row["rotation"])
+        & (rtn["scaling"] == row["scaling"])
         & (rtn["bits"] >= row["bits"])
         & (rtn["perplexity"] <= row["staggered"])
     ]

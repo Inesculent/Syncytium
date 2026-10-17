@@ -8,11 +8,13 @@ from syncytium.quant.rebuild import (
     parent_weights,
     partial_weights,
 )
+from syncytium.quant.scaling import ChannelScales, search_scales
 from syncytium.quant.scheme import Scheme
 from syncytium.quant.simulate import simulate_child, simulate_rebuild
 from syncytium.quant.stagger import child_codes, child_weights, offset, quantize_children
 
 __all__ = [
+    "ChannelScales",
     "Estimator",
     "Grid",
     "Scheme",
@@ -27,6 +29,7 @@ __all__ = [
     "parent_weights",
     "partial_weights",
     "quantize_children",
+    "search_scales",
     "simulate_child",
     "simulate_rebuild",
     "to_groups",

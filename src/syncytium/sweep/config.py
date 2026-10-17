@@ -21,17 +21,21 @@ class EvalConfig:
 
     window: int = 2048
     max_windows: int | None = None
+    # Text for channel scaling comes from the train split, never the evaluated test split.
+    calibration_window: int = 512
+    calibration_windows: int = 64
 
 
 @dataclass(frozen=True)
 class GridConfig:
     """The conditions to evaluate.
 
-    Every combination of ``bits``, ``group_sizes``, ``phases`` and ``rotation`` is one
-    setting. Each setting evaluates, for every N in ``children``: each child alone, the full
-    rebuild, and every partial rebuild missing up to ``max_missing`` children. ``rtn_bits``
-    adds standard round-to-nearest baselines at each listed bit width. Rotated settings use
-    the shared rotation drawn from ``seed``.
+    Every combination of ``bits``, ``group_sizes``, ``phases``, ``rotation`` and ``scaling``
+    is one setting. Each setting evaluates, for every N in ``children``: each child alone, the
+    full rebuild, and every partial rebuild missing up to ``max_missing`` children.
+    ``rtn_bits`` adds standard round-to-nearest baselines at each listed bit width, with every
+    rotation and scaling option. Rotated settings use the shared rotation drawn from ``seed``;
+    scaled settings use activation-aware channel scales searched on calibration text.
     """
 
     bits: tuple[int, ...]
@@ -39,12 +43,13 @@ class GridConfig:
     children: tuple[int, ...]
     phases: tuple[float, ...] = (0.0,)
     rotation: tuple[bool, ...] = (False,)
+    scaling: tuple[bool, ...] = (False,)
     seed: int = 0
     max_missing: int = 1
     rtn_bits: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
-        for name in ("bits", "group_sizes", "children", "phases", "rotation"):
+        for name in ("bits", "group_sizes", "children", "phases", "rotation", "scaling"):
             if not getattr(self, name):
                 raise ValueError(f"grid.{name} must not be empty")
         if self.max_missing < 0:

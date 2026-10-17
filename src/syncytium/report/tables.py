@@ -1,9 +1,9 @@
 """Turning a sweep's results log into a summary table per setting.
 
-Each row of the summary is one setting (bits, group size, phase, rotation, N) and answers
-the hypotheses directly: whether every child is usable alone (H2), how close the full rebuild
-comes to bf16 (H3) and whether losing one child still beats any single child (H4). The
-thresholds are the ones fixed in docs/hypothesis.md after the 0.8B pilot.
+Each row of the summary is one setting (bits, group size, phase, rotation, scaling, N) and
+answers the hypotheses directly: whether every child is usable alone (H2), how close the full
+rebuild comes to bf16 (H3) and whether losing one child still beats any single child (H4).
+The thresholds are the ones fixed in docs/hypothesis.md after the 0.8B pilot.
 """
 
 import json
@@ -11,19 +11,22 @@ from pathlib import Path
 
 import pandas as pd
 
-SETTING = ["bits", "group_size", "phase", "rotation", "num_children"]
+SETTING = ["bits", "group_size", "phase", "rotation", "scaling", "num_children"]
 KINDS = ("child", "rebuild", "partial")
 H2_MAX_RATIO = 1.5
 H3_MAX_GAP = 0.5
 
 
 def load_results(path: Path) -> pd.DataFrame:
-    """Read ``results.jsonl`` into a frame with a ``rotation`` column ("on" or "off")."""
+    """Read ``results.jsonl`` with ``rotation`` and ``scaling`` columns ("on" or "off")."""
     with path.open(encoding="utf-8") as file:
         frame = pd.DataFrame([json.loads(line) for line in file if line.strip()])
     # Rows logged before rotation existed have no rotation_seed field.
     seeds = frame.get("rotation_seed", pd.Series(index=frame.index, dtype=object))
     frame["rotation"] = seeds.notna().map({True: "on", False: "off"})
+    # Rows logged before channel scaling existed have no scaling field.
+    scaled = frame.get("scaling", pd.Series(False, index=frame.index)).fillna(False)
+    frame["scaling"] = scaled.astype(bool).map({True: "on", False: "off"})
     # The bf16 row has no scheme; nullable integers keep these columns integral.
     integers = ["bits", "group_size", "num_children"]
     frame[integers] = frame[integers].astype("Int64")

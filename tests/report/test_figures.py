@@ -1,7 +1,12 @@
 import pytest
+import torch
+from transformers.models.qwen3_5 import Qwen3_5ForCausalLM
 
-from syncytium.report import all_figures, load_results, write_report
+from syncytium.report import all_figures, load_results, summarize, write_report
 from syncytium.report.figures import _mark
+from syncytium.sweep import ResultLog, plan, run_conditions
+from syncytium.sweep.config import GridConfig
+from syncytium.sweep.runner import calibrate
 
 
 @pytest.fixture(scope="module")
@@ -38,3 +43,29 @@ def test_report_writes_tables_and_figures(results_dir, tmp_path):
     assert (tmp_path / "summary.csv").exists()
     assert (tmp_path / "offsets.svg").exists()
     assert (tmp_path / "pareto-p0-rot-on.png").exists()
+
+
+@pytest.fixture(scope="module")
+def mixed_results(tmp_path_factory, tiny_config):
+    """A log with scaled and unscaled settings of the same grid."""
+    directory = tmp_path_factory.mktemp("mixed")
+    torch.manual_seed(0)
+    model = Qwen3_5ForCausalLM(tiny_config).eval()
+    batches = torch.randint(0, 256, (2, 16), generator=torch.Generator().manual_seed(0))
+    grid = GridConfig(
+        bits=(4,), group_sizes=(32,), children=(4,), scaling=(False, True), rtn_bits=(4, 6)
+    )
+    log = ResultLog(directory / "results.jsonl")
+    run_conditions(plan(grid), model, batches, log, calibrate(model, batches))
+    return load_results(directory / "results.jsonl")
+
+
+def test_scaled_settings_get_their_own_rows_and_figures(mixed_results):
+    assert sorted(summarize(mixed_results)["scaling"]) == ["off", "on"]
+    names = set(all_figures(mixed_results))
+    assert {"recovery-p0-rot-off", "recovery-p0-rot-off-scaled"} <= names
+    assert {"baselines-p0-rot-off", "baselines-p0-rot-off-scaled"} <= names
+
+
+def test_logs_without_scaling_read_as_unscaled(results):
+    assert set(results["scaling"]) == {"off"}

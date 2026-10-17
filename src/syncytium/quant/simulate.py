@@ -3,7 +3,8 @@
 Each function quantizes a tensor group by group and returns dequantized weights in the
 tensor's original shape. Phase 1 evaluates children and rebuilds this way, without custom
 low-bit kernels. With a rotation seed, groups are rotated before quantization and rotated
-back afterwards.
+back afterwards. With channel scales (see :mod:`syncytium.quant.scaling`), input channels are
+multiplied by them before quantization and divided by them afterwards.
 """
 
 from collections.abc import Callable, Collection
@@ -27,8 +28,17 @@ from syncytium.quant.stagger import child_codes, child_weights
 CHUNK_GROUPS = 1 << 18
 
 
-def simulate_child(weight: Tensor, scheme: Scheme, index: int) -> Tensor:
-    """Dequantized weights of child ``index`` (k) under ``scheme``."""
+def simulate_child(
+    weight: Tensor, scheme: Scheme, index: int, scales: Tensor | None = None
+) -> Tensor:
+    """Dequantized weights of child ``index`` (k) under ``scheme``.
+
+    Args:
+        weight: The weight, input channels along the last dimension.
+        scheme: Quantization settings.
+        index: Child index k.
+        scales: Optional per-input-channel scales shared by every child.
+    """
     n, phase = scheme.num_children, scheme.phase
 
     def quantize(groups: Tensor) -> Tensor:
@@ -36,7 +46,7 @@ def simulate_child(weight: Tensor, scheme: Scheme, index: int) -> Tensor:
         codes = child_codes(normalize(groups, grid), grid, index, n, phase)
         return child_weights(codes, grid, index, n, phase)
 
-    return _map_groups(weight, scheme, quantize)
+    return _map_groups(weight, scheme, quantize, scales)
 
 
 def simulate_rebuild(
@@ -44,11 +54,13 @@ def simulate_rebuild(
     scheme: Scheme,
     indices: Collection[int],
     estimator: Estimator = Estimator.MIDPOINT,
+    scales: Tensor | None = None,
 ) -> Tensor:
     """Weights rebuilt from the children in ``indices``.
 
     With every child present this is the exact integer rebuild; with a subset, ``estimator``
     chooses between the partial rebuild by interval intersection and the children's mean.
+    ``scales`` are optional per-input-channel scales shared by every child.
     """
     available = sorted(set(indices))
     n, phase = scheme.num_children, scheme.phase
@@ -62,11 +74,19 @@ def simulate_rebuild(
             return parent_weights(parent_codes(codes.values()), grid, n, phase)
         return partial(codes, grid, n, phase)
 
-    return _map_groups(weight, scheme, rebuild)
+    return _map_groups(weight, scheme, rebuild, scales)
 
 
-def _map_groups(weight: Tensor, scheme: Scheme, fn: Callable[[Tensor], Tensor]) -> Tensor:
-    """Apply ``fn`` to the (rotated) groups of ``weight`` in chunks and restore its shape."""
+def _map_groups(
+    weight: Tensor,
+    scheme: Scheme,
+    fn: Callable[[Tensor], Tensor],
+    scales: Tensor | None = None,
+) -> Tensor:
+    """Apply ``fn`` to the (scaled, rotated) groups of ``weight`` in chunks; undo both after."""
+    if scales is not None:
+        scales = scales.to(weight)
+        return _map_groups(weight * scales, scheme, fn) / scales
     groups = to_groups(weight, scheme.group_size)
     if scheme.rotation_seed is not None:
         rotation = random_rotation(scheme.group_size, scheme.rotation_seed).to(weight)

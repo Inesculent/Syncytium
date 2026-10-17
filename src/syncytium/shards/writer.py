@@ -43,6 +43,8 @@ def write_children(
         model: Identifier of the source model, recorded in the manifest.
         directory: Output directory; created if missing.
     """
+    if scheme.scaling:
+        raise ValueError("shards cannot store channel scales yet; use an unscaled scheme")
     directory.mkdir(parents=True, exist_ok=True)
     children: list[dict[str, Tensor]] = [{} for _ in range(scheme.num_children)]
     parent_hash = hashlib.sha256()
