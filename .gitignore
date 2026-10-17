@@ -16,17 +16,17 @@ dist/
 htmlcov/
 
 # Model weights and data (never committed; see README for how to fetch them)
-models/
-data/
+/models/
+/data/
 *.gguf
 *.safetensors
 *.bin
 *.pt
 
 # Experiment outputs (summaries go in docs/, raw outputs stay local)
-results/
-runs/
-wandb/
+/results/
+/runs/
+/wandb/
 
 # Editors and OS
 .idea/

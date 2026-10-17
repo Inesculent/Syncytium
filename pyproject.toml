@@ -78,6 +78,7 @@ select = [
 ]
 ignore = [
     "D105",     # magic-method docstrings
+    "D107",     # __init__ arguments are documented in the class docstring
     "PLR2004",  # numeric constants are common in quantization math
 ]
 

@@ -10,7 +10,7 @@ own. Decisions taken while planning are recorded at the end.
 | 1.1 Quantization core | Per-group grids, staggered child codes, integer rebuild, partial rebuild by interval intersection. Tests for the identity, code ranges and error bounds. | `src/holograph/quant/` |
 | 1.2 Model integration | Load the Qwen3.5 text stack; select tensors to quantize (linear weights and embeddings); swap child or parent weights in place. Tests on a tiny random config. | `src/holograph/models/` |
 | 1.3 Evaluation | WikiText-2 perplexity with fixed windows; memory accounting in bits per weight including unquantized tensors. | `src/holograph/eval/` |
-| 1.4 Sweep runner | TOML configs; resumable JSONL results with config, seed, versions and commit. Offsets for *N* = 2 and 4 are subsets of *N* = 8, so only 8 distinct children are evaluated per setting. | `scripts/`, `configs/` |
+| 1.4 Sweep runner | TOML configs; resumable JSONL results with config, seed, versions and commit. Offsets for *N* = 2 and 4 are subsets of *N* = 8, so only 8 distinct children are evaluated per setting. Includes an offset-phase ablation, *k*/*N* versus (*k* + ½)/*N* (see below). | `scripts/`, `configs/` |
 | 1.5 Shared rotation | Block-diagonal randomized Hadamard transform with block size equal to the group size. Test that the rebuild identity still holds. | `src/holograph/quant/` |
 | 1.6 Pilot and sweep | 0.8B pilot; fix the usable-child threshold in the hypothesis document; run 2B and 4B; plots and write-up. | `docs/results/` |
 
@@ -32,11 +32,21 @@ candidate follow-up.
 
 ## Known risks
 
-- Qwen3.5 checkpoints are packaged as multimodal models; loading only the text stack may need
-  a weight-name mapping. Checked at the start of stage 1.2.
+- ~~Qwen3.5 checkpoints are packaged as multimodal models; loading only the text stack may
+  need a weight-name mapping.~~ Resolved in stage 1.2: `AutoModelForCausalLM` loads the text
+  stack directly. The reference PyTorch Gated DeltaNet kernels run a 2048-token window of the
+  0.8B model in about 0.2 s, so the optimized kernels are not needed.
 - llama.cpp support for Qwen3.5 small models must be confirmed at the start of stage 2.2.
 - llama.cpp has no plain 2- or 3-bit block format, so containerized children are 4-bit.
   Results at 2 and 3 bits come from phase 1 only.
+
+## Observations
+
+- **Child quality depends on the offset** (stage 1.2 smoke test, one 2048-token passage, so
+  preliminary). With offset ½ the grid places levels exactly on each group's minimum and
+  maximum, so outliers are reproduced exactly; with offset 0 both extremes are off by Δ/2.
+  Centering the offsets at (*k* + ½)/*N* keeps the rebuild identity (the fine grid becomes
+  round-to-nearest) and avoids the worst-placed child; the sweep tests this.
 
 ## Decisions
 

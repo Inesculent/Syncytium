@@ -1,0 +1,28 @@
+"""Settings shared by one set of staggered children."""
+
+from dataclasses import dataclass
+
+from holograph.quant.grid import MAX_BITS
+
+
+@dataclass(frozen=True)
+class Scheme:
+    """Quantization settings shared by every child in a set.
+
+    Attributes:
+        bits: Bits per child code, b.
+        group_size: Weights per quantization group, g.
+        num_children: Number of children, N.
+    """
+
+    bits: int
+    group_size: int
+    num_children: int
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.bits <= MAX_BITS:
+            raise ValueError(f"bits must be in [1, {MAX_BITS}], got {self.bits}")
+        if self.group_size < 1:
+            raise ValueError(f"group_size must be positive, got {self.group_size}")
+        if self.num_children < 1:
+            raise ValueError(f"num_children must be positive, got {self.num_children}")
