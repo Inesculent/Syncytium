@@ -29,6 +29,8 @@ def test_loads_values_and_defaults(tmp_path):
     assert config.output == Path("results/test")
     assert config.grid.children == (2, 4)
     assert config.grid.phases == (0.0,)
+    assert config.grid.rotation == (False,)
+    assert config.grid.seed == 0
     assert config.evaluation.window == 2048
     assert config.evaluation.max_windows is None
     assert config.model.dtype == "bfloat16"

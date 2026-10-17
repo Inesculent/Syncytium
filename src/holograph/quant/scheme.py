@@ -14,12 +14,14 @@ class Scheme:
         group_size: Weights per quantization group, g.
         num_children: Number of children, N.
         phase: Offset phase φ; child k uses offset (k + φ)/N.
+        rotation_seed: Seed of the shared group rotation, or ``None`` for no rotation.
     """
 
     bits: int
     group_size: int
     num_children: int
     phase: float = 0.0
+    rotation_seed: int | None = None
 
     def __post_init__(self) -> None:
         if not 1 <= self.bits <= MAX_BITS:
@@ -30,3 +32,5 @@ class Scheme:
             raise ValueError(f"num_children must be positive, got {self.num_children}")
         if not 0 <= self.phase < 1:
             raise ValueError(f"phase must be in [0, 1), got {self.phase}")
+        if self.rotation_seed is not None and self.group_size & (self.group_size - 1):
+            raise ValueError(f"rotation needs a power-of-two group_size, got {self.group_size}")

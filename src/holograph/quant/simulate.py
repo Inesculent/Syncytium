@@ -2,7 +2,8 @@
 
 Each function quantizes a tensor group by group and returns dequantized weights in the
 tensor's original shape. Phase 1 evaluates children and rebuilds this way, without custom
-low-bit kernels.
+low-bit kernels. With a rotation seed, groups are rotated before quantization and rotated
+back afterwards.
 """
 
 from collections.abc import Callable, Collection
@@ -12,6 +13,7 @@ from torch import Tensor
 
 from holograph.quant.grid import fit_grid, from_groups, normalize, to_groups
 from holograph.quant.rebuild import parent_codes, parent_weights, partial_weights
+from holograph.quant.rotation import random_rotation
 from holograph.quant.scheme import Scheme
 from holograph.quant.stagger import child_codes, child_weights
 
@@ -28,7 +30,7 @@ def simulate_child(weight: Tensor, scheme: Scheme, index: int) -> Tensor:
         codes = child_codes(normalize(groups, grid), grid, index, n, phase)
         return child_weights(codes, grid, index, n, phase)
 
-    return _map_groups(weight, scheme.group_size, quantize)
+    return _map_groups(weight, scheme, quantize)
 
 
 def simulate_rebuild(weight: Tensor, scheme: Scheme, indices: Collection[int]) -> Tensor:
@@ -48,11 +50,21 @@ def simulate_rebuild(weight: Tensor, scheme: Scheme, indices: Collection[int]) -
             return parent_weights(parent_codes(list(codes.values())), grid, n, phase)
         return partial_weights(codes, grid, n, phase)
 
-    return _map_groups(weight, scheme.group_size, rebuild)
+    return _map_groups(weight, scheme, rebuild)
 
 
-def _map_groups(weight: Tensor, group_size: int, fn: Callable[[Tensor], Tensor]) -> Tensor:
-    """Apply ``fn`` to the groups of ``weight`` in chunks and restore its shape."""
-    groups = to_groups(weight, group_size)
+def _map_groups(weight: Tensor, scheme: Scheme, fn: Callable[[Tensor], Tensor]) -> Tensor:
+    """Apply ``fn`` to the (rotated) groups of ``weight`` in chunks and restore its shape."""
+    groups = to_groups(weight, scheme.group_size)
+    if scheme.rotation_seed is not None:
+        rotation = random_rotation(scheme.group_size, scheme.rotation_seed).to(weight)
+        fn = _in_rotated_basis(fn, rotation)
     result = torch.cat([fn(chunk) for chunk in groups.split(CHUNK_GROUPS)])
     return from_groups(result, weight.shape)
+
+
+def _in_rotated_basis(
+    fn: Callable[[Tensor], Tensor], rotation: Tensor
+) -> Callable[[Tensor], Tensor]:
+    """Wrap ``fn`` so it runs on groups times R and its output is multiplied back by Rᵀ."""
+    return lambda groups: fn(groups @ rotation) @ rotation.T

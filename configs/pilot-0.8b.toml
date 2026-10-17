@@ -14,5 +14,7 @@ bits = [2, 3, 4]
 group_sizes = [64]
 children = [2, 4, 8]
 phases = [0.0, 0.5]
+rotation = [false, true]
+seed = 0
 max_missing = 1
 rtn_bits = [2, 3, 4, 5, 6, 7, 8]

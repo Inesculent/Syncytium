@@ -27,21 +27,24 @@ class EvalConfig:
 class GridConfig:
     """The conditions to evaluate.
 
-    Every combination of ``bits``, ``group_sizes`` and ``phases`` is one setting. Each
-    setting evaluates, for every N in ``children``: each child alone, the full rebuild, and
-    every partial rebuild missing up to ``max_missing`` children. ``rtn_bits`` adds
-    standard round-to-nearest baselines at each listed bit width.
+    Every combination of ``bits``, ``group_sizes``, ``phases`` and ``rotation`` is one
+    setting. Each setting evaluates, for every N in ``children``: each child alone, the full
+    rebuild, and every partial rebuild missing up to ``max_missing`` children. ``rtn_bits``
+    adds standard round-to-nearest baselines at each listed bit width. Rotated settings use
+    the shared rotation drawn from ``seed``.
     """
 
     bits: tuple[int, ...]
     group_sizes: tuple[int, ...]
     children: tuple[int, ...]
     phases: tuple[float, ...] = (0.0,)
+    rotation: tuple[bool, ...] = (False,)
+    seed: int = 0
     max_missing: int = 1
     rtn_bits: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
-        for name in ("bits", "group_sizes", "children", "phases"):
+        for name in ("bits", "group_sizes", "children", "phases", "rotation"):
             if not getattr(self, name):
                 raise ValueError(f"grid.{name} must not be empty")
         if self.max_missing < 0:

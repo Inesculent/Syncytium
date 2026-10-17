@@ -47,6 +47,16 @@ candidate follow-up.
   maximum, so outliers are reproduced exactly; with offset 0 both extremes are off by Δ/2.
   Centering the offsets at (*k* + ½)/*N* keeps the rebuild identity (the fine grid becomes
   round-to-nearest) and avoids the worst-placed child; the sweep tests this.
+- **Rotation helps children, not rebuilds** (stage 1.5 check, 0.8B, 16 windows, so
+  preliminary). The rotated round-to-nearest child improved at every bit width (4-bit: 14.52
+  to 14.29; 3-bit: 28.2 to 24.2), while full rebuilds barely moved. 3-bit children of the
+  0.8B model remain far from bf16 (12.89) even with rotation.
+- **Unusable children can still rebuild a usable parent.** Four 2-bit children each score a
+  perplexity above 10,000, yet their rebuild scores 15.5–15.9. Children carry the parent's
+  information even when they cannot serve on their own.
+- **Open question: rotation block size.** The rotation currently mixes values only within one
+  quantization group. Larger blocks spread outliers further and may help low-bit children
+  more; a candidate ablation once the pilot is in.
 
 ## Decisions
 

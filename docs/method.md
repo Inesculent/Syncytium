@@ -71,11 +71,14 @@ bf16 if the memory target is to be met.
 
 ## Optional shared rotation
 
-Before quantization, each weight matrix can be multiplied by an orthogonal matrix *H* (a
-randomized Hadamard transform) along its input dimension: *W*′ = *W H*. Children quantize *W*′,
-and weights are recovered as *Ŵ*′*H*ᵀ. *H* is fixed by a seed shared across all children, and
-the transform is linear, so the rebuild identity still holds. Rotation spreads outliers across
-a group, which usually improves low-bit rounding. In phase 1 it is simulated by dequantizing in
+Before quantization, each group of *g* weights can be multiplied by an orthogonal *g*×*g*
+matrix *R* = *D H* / √*g*, where *H* is a Sylvester Hadamard matrix and *D* a diagonal of
+random signs. Children quantize the rotated groups, and weights are recovered by multiplying
+back by *R*ᵀ. *R* is fixed by a seed shared across all children and the transform is linear,
+so the rebuild identity still holds. Rotation spreads outliers across the group, shrinking its
+range and therefore Δ. The per-weight error bounds then hold in the rotated basis; in the
+original basis the error of each group is bounded in Euclidean norm by √*g* times the
+per-weight bound. Because *R* acts within a group, it needs no power-of-two model dimension. In phase 1 it is simulated by dequantizing in
 PyTorch; running rotated children efficiently needs kernel support that stock llama.cpp lacks.
 
 ## Memory accounting

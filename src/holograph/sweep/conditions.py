@@ -47,6 +47,8 @@ class Condition:
             return self.kind.value
         s = self.scheme
         setting = f"b{s.bits}-g{s.group_size}-n{s.num_children}-p{s.phase:g}"
+        if s.rotation_seed is not None:
+            setting += f"-r{s.rotation_seed}"
         return f"{self.kind.value}/{setting}/k{','.join(map(str, self.indices))}"
 
     @property
@@ -62,7 +64,8 @@ class Condition:
         """Conditions with equal keys produce identical weights."""
         if self.scheme is None:
             return (self.kind.value,)
-        return (self.scheme.bits, self.scheme.group_size, self.offsets)
+        s = self.scheme
+        return (s.bits, s.group_size, s.rotation_seed, self.offsets)
 
     def transform(self) -> Transform | None:
         """Weight transform for this condition; ``None`` means the original weights."""
@@ -77,11 +80,16 @@ class Condition:
 def plan(grid: GridConfig) -> list[Condition]:
     """Every condition in ``grid``, starting with the bf16 baseline."""
     conditions = [Condition(Kind.BF16)]
-    for bits, group_size, phase in product(grid.bits, grid.group_sizes, grid.phases):
+    settings = product(grid.bits, grid.group_sizes, grid.phases, grid.rotation)
+    for bits, group_size, phase, rotated in settings:
+        seed = grid.seed if rotated else None
         for n in grid.children:
-            conditions += _setting(Scheme(bits, group_size, n, phase), grid.max_missing)
-    for bits, group_size in product(grid.rtn_bits, grid.group_sizes):
-        conditions.append(Condition(Kind.RTN, Scheme(bits, group_size, 1, phase=0.5), (0,)))
+            conditions += _setting(Scheme(bits, group_size, n, phase, seed), grid.max_missing)
+    for bits, group_size, rotated in product(grid.rtn_bits, grid.group_sizes, grid.rotation):
+        scheme = Scheme(
+            bits, group_size, 1, phase=0.5, rotation_seed=grid.seed if rotated else None
+        )
+        conditions.append(Condition(Kind.RTN, scheme, (0,)))
     return conditions
 
 
