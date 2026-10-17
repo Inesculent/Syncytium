@@ -1,0 +1,6 @@
+# Normalize to LF so shell scripts and Dockerfiles work inside Linux containers.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.pdf binary

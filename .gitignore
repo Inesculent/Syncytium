@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Environments
+.venv/
+.env
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Model weights and data (never committed; see README for how to fetch them)
+models/
+data/
+*.gguf
+*.safetensors
+*.bin
+*.pt
+
+# Experiment outputs (summaries go in docs/, raw outputs stay local)
+results/
+runs/
+wandb/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
