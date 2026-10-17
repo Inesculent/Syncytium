@@ -10,6 +10,8 @@ from torch import Tensor
 from syncytium.quant.grid import MAX_BITS
 
 BYTE = 8
+# Codes unpacked at once (a multiple of 8). Bounds temporary memory for large tensors.
+CHUNK_CODES = 1 << 23
 
 
 def pack(codes: Tensor, bits: int) -> Tensor:
@@ -37,14 +39,25 @@ def unpack(packed: Tensor, bits: int, count: int) -> Tensor:
     _check_bits(bits)
     if packed.numel() * BYTE < count * bits:
         raise ValueError(f"{packed.numel()} bytes cannot hold {count} codes of {bits} bits")
-    shifts = torch.arange(BYTE, dtype=torch.uint8)
-    stream = ((packed.unsqueeze(-1) >> shifts) & 1).reshape(-1)[: count * bits]
-    return _merge_bits(stream.reshape(count, bits))
+    codes = torch.empty(count, dtype=torch.uint8)
+    # Every run of 8 codes fills exactly ``bits`` bytes, so chunks of a multiple of 8 codes
+    # start on byte boundaries.
+    for start in range(0, count, CHUNK_CODES):
+        stop = min(start + CHUNK_CODES, count)
+        chunk = packed[start * bits // BYTE : packed_size(stop, bits)]
+        codes[start:stop] = _unpack_chunk(chunk, bits, stop - start)
+    return codes
 
 
 def packed_size(count: int, bits: int) -> int:
     """Bytes needed to pack ``count`` codes of ``bits`` bits."""
     return -(-count * bits // BYTE)
+
+
+def _unpack_chunk(packed: Tensor, bits: int, count: int) -> Tensor:
+    shifts = torch.arange(BYTE, dtype=torch.uint8)
+    stream = ((packed.unsqueeze(-1) >> shifts) & 1).reshape(-1)[: count * bits]
+    return _merge_bits(stream.reshape(count, bits))
 
 
 def _merge_bits(bit_columns: Tensor) -> Tensor:

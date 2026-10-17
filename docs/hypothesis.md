@@ -103,8 +103,30 @@ used because perplexity is the primary metric.
 - Perplexity on the WikiText-2 test split (fixed context length and stride, recorded in each
   run's config).
 - Weight memory in bytes, including scales and every unquantized tensor.
-- Rebuild exactness (hash match) and rebuild wall-clock time.
+- Rebuild exactness (hash match) and rebuild wall-clock time, split into verifying the shard
+  files and streaming, combining and dequantizing them (`syncytium-rebuild`, logged to
+  `rebuilds.jsonl`).
 - Zero-shot accuracy on a small task suite for the most promising configurations.
+
+Phase 1 swaps dequantized bf16 weights into one model, so every condition runs at the same
+speed; its per-condition `seconds` measure the harness, not the scheme. Speed is measured
+only in the container demo, on real low-bit weights and a real network.
+
+**System measurements (container demo).** Every request and event is logged as one JSON line
+with a timestamp.
+
+- *Per request:* serving mode (main, solo, pooled, partial rebuild), the children that took
+  part, prompt and generated tokens, time to first token, decode tokens per second, end-to-end
+  latency, and bytes sent and received per generated token on each node.
+- *Per node, sampled during generation:* resident memory and CPU time, against the
+  container's memory limit.
+- *Per event:* the time a container was killed, how long until the endpoint noticed, how
+  many requests failed or were rerouted meanwhile, and for each rebuild the bytes moved, the
+  transfer, verification and load times, and the hash result.
+- *Quality per mode:* perplexity on a fixed held-out slice, and for pooled mode the largest
+  logit difference from the rebuilt parent on the same tokens.
+- *Totals:* compute per generated token summed over all nodes, so pooled mode's duplicated
+  work is reported next to its latency.
 
 **Conditions compared for each configuration.**
 

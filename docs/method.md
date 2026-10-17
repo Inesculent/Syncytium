@@ -70,9 +70,15 @@ Each child is one safetensors file:
   unchanged.
 
 Every node also keeps the set's manifest: model id, scheme (*b*, *g*, *N*, φ, rotation seed),
-the name and shape of every tensor, the SHA-256 of each child's file, and the SHA-256 of the
-parent's integer codes. A shard is checked against its hash before use, and a full rebuild
-must reproduce the parent hash, which proves it is bit-exact.
+the rotation's signs, the name and shape of every tensor, the SHA-256 of each child's file,
+and the SHA-256 of the parent's integer codes. A shard is checked against its hash before
+use, and a full rebuild must reproduce the parent hash, which proves it is bit-exact. The
+parent hash covers codes in the rotated basis, not the rotation itself, so readers take the
+signs from the manifest rather than regenerating them from the seed, which would depend on
+PyTorch's random number generator.
+
+A rebuild streams the shards one tensor at a time, so its peak memory is the rebuilt weights
+plus a few copies of the largest tensor rather than *N* whole children.
 
 Embeddings are quantized like any other weight. Qwen3.5 uses a 248K-token vocabulary with tied
 embeddings, so the embedding table is roughly a quarter of the 2B model and cannot be left in
@@ -83,7 +89,8 @@ bf16 if the memory target is to be met.
 Before quantization, each group of *g* weights can be multiplied by an orthogonal *g*×*g*
 matrix *R* = *D H* / √*g*, where *H* is a Sylvester Hadamard matrix and *D* a diagonal of
 random signs. Children quantize the rotated groups, and weights are recovered by multiplying
-back by *R*ᵀ. *R* is fixed by a seed shared across all children and the transform is linear,
+back by *R*ᵀ. *R* is fixed by a seed shared across all children (shards store the resulting
+signs) and the transform is linear,
 so the rebuild identity still holds. Rotation spreads outliers across the group, shrinking its
 range and therefore Δ. The per-weight error bounds then hold in the rotated basis; in the
 original basis the error of each group is bounded in Euclidean norm by √*g* times the
@@ -115,9 +122,14 @@ and every linear layer is linear in its weights,
 
   *Ŵ x* = (1/*N*) Σₖ *Ŵ*ₖ *x*.
 
-Each device multiplies the stage's input by its own child, and the stage averages the
-devices' outputs. With every device alive this is exactly the rebuilt parent, although no
-device ever holds more than one child. Activations pass between stages as in any pipeline.
+At every linear layer of the stage, each device multiplies the same input by its own child
+and the devices average their outputs before the next nonlinearity. Averaging only the
+stage's final output would not work: the norms, activations, attention and Gated DeltaNet
+recurrence between linear layers are not linear, so that gives an ensemble of per-child
+stages, not the parent. With every device alive the result is the rebuilt parent (up to
+floating-point rounding in the averaging), although no device ever holds more than one
+child. Activations pass between stages as in any pipeline; stage 0 is visited twice per
+token, for the embedding lookup and the output head.
 
 When devices fail, a stage averages its surviving devices instead (the *mean* estimator).
 This is the only estimator the devices can compute without gathering each other's codes.
@@ -128,7 +140,9 @@ and with independent device failure probability *p* the pipeline runs with proba
 Π (1 − *p*ᴺ) over its stages.
 
 `syncytium-pool` simulates this: for each state of the device grid it sets every stage's
-weights from that stage's surviving children and measures perplexity.
+weights from that stage's surviving children and measures perplexity. Setting the weights to
+the children's mean is equivalent to averaging every linear layer's outputs, so the
+simulation matches the per-layer protocol above.
 
 ## System design (container demo)
 
@@ -147,6 +161,25 @@ one child and serve it on CPU through llama.cpp. All run on one Docker network.
    loads the parent and resumes serving.
 5. *Partial rebuild.* If children are also missing, main rebuilds from the rest at reduced
    precision and records which offsets were absent.
+
+**Serving modes while main is down.**
+
+- *Solo.* One child generates the whole response. Child quality at single-machine speed, with
+  no traffic between children.
+- *Pooled.* The live children run the parent together in lockstep. At every linear layer each
+  child multiplies the same input by its own weights, and the results are averaged before the
+  next nonlinearity (see "Pooled pipeline"). With every child alive the output is the
+  parent's, although no node holds parent weights. The averaging must happen at every layer:
+  averaging the children's final outputs gives an ensemble, not the parent. Each layer needs
+  about four averaging rounds (the attention or Gated DeltaNet input projections, their output
+  projection, the MLP's gate and up projections, and its down projection). The gate and up
+  outputs are several times the hidden size and dominate the bytes exchanged per token. Every
+  child keeps an identical copy of the key/value cache. If a child fails mid-generation, later layers average the survivors and
+  generation continues; cache entries already computed stay valid.
+- *Rebuild.* As in steps 4 and 5, after which traffic returns to main.
+
+The request endpoint uses pooled mode when enough children are reachable with low latency,
+and solo mode otherwise or for latency-critical requests.
 
 **Operator controls.** Only the operator starts containers. Children send shards only to the
 registered main service. A signed revoke message stops every node and deletes its shards.

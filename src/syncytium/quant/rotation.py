@@ -4,7 +4,12 @@ Each group of g weights is multiplied by the same orthogonal g-by-g matrix R = D
 H is a Sylvester Hadamard matrix and D a diagonal of random signs fixed by a seed. Rotation
 spreads outliers across the group before rounding; because R is linear and shared by every
 child, the rebuild identity still holds after rotating back.
+
+The signs come from PyTorch's CPU generator, which is not guaranteed to give the same values
+across versions or to other implementations, so shard manifests store the signs themselves.
 """
+
+from collections.abc import Sequence
 
 import torch
 from torch import Tensor
@@ -24,8 +29,24 @@ def hadamard(size: int) -> Tensor:
     return matrix
 
 
+def random_signs(size: int, seed: int) -> tuple[int, ...]:
+    """The diagonal of D: ``size`` random signs (±1) drawn from ``seed``."""
+    generator = torch.Generator().manual_seed(seed)
+    return tuple((torch.randint(0, 2, (size,), generator=generator) * 2 - 1).tolist())
+
+
+def signed_hadamard(signs: Sequence[int]) -> Tensor:
+    """Orthogonal matrix R = D H / √g for the diagonal ``signs`` of D.
+
+    Raises:
+        ValueError: If a sign is not ±1 or their number is not a power of two.
+    """
+    if any(sign not in (-1, 1) for sign in signs):
+        raise ValueError("rotation signs must all be +1 or -1")
+    size = len(signs)
+    return torch.tensor(signs, dtype=torch.float32).unsqueeze(1) * hadamard(size) / size**0.5
+
+
 def random_rotation(size: int, seed: int) -> Tensor:
     """Orthogonal matrix R = D H / √size with random signs D drawn from ``seed``."""
-    generator = torch.Generator().manual_seed(seed)
-    signs = torch.randint(0, 2, (size, 1), generator=generator) * 2 - 1
-    return signs * hadamard(size) / size**0.5
+    return signed_hadamard(random_signs(size, seed))

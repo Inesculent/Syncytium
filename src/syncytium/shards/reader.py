@@ -1,15 +1,23 @@
-"""Reading child shards and rebuilding weights from any set of them."""
+"""Reading child shards and rebuilding weights from any set of them.
+
+A rebuild streams the shards: tensors are read one at a time from every shard, and each
+tensor's codes are combined and dequantized before the next is read. Peak memory is the
+rebuilt weights plus a few copies of the largest tensor, not N whole shards.
+"""
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
+import torch
+from safetensors import safe_open
 from safetensors.torch import load_file
 from torch import Tensor
 
 from syncytium.quant import Grid, child_weights, parent_codes, parent_weights, partial_weights
-from syncytium.quant.rotation import random_rotation
+from syncytium.quant.simulate import CHUNK_GROUPS
 from syncytium.shards.manifest import (
     Manifest,
     ShardError,
@@ -18,6 +26,11 @@ from syncytium.shards.manifest import (
     update_codes_hash,
 )
 from syncytium.shards.packing import unpack
+
+# Reads one tensor of a shard file by name (from ``load_file`` or ``safe_open``).
+Getter = Callable[[str], Tensor]
+# Dequantizes a range of groups, given that range and the grid restricted to it.
+Estimate = Callable[[slice, Grid], Tensor]
 
 
 @dataclass(frozen=True)
@@ -37,8 +50,8 @@ class Child:
     full_precision: dict[str, Tensor]
 
 
-def read_child(path: Path, manifest: Manifest, index: int) -> Child:
-    """Read child ``index`` after checking its file against the manifest.
+def verify_shard(path: Path, manifest: Manifest, index: int) -> None:
+    """Check that ``path`` is child ``index`` of the set described by ``manifest``.
 
     Raises:
         ShardError: If ``index`` is out of range or the file's hash does not match.
@@ -47,99 +60,134 @@ def read_child(path: Path, manifest: Manifest, index: int) -> Child:
         raise ShardError(f"child index {index} is not in [0, {manifest.scheme.num_children})")
     if file_sha256(path) != manifest.shard_sha256[index]:
         raise ShardError(f"{path} does not match the manifest hash of child {index}")
+
+
+def read_child(path: Path, manifest: Manifest, index: int) -> Child:
+    """Read child ``index`` after checking its file against the manifest.
+
+    Raises:
+        ShardError: If ``index`` is out of range or the file's hash does not match.
+    """
+    verify_shard(path, manifest, index)
     stored = load_file(path)
     child = Child(index, codes={}, grids={}, full_precision={})
     for spec in manifest.tensors:
         if spec.quantized:
-            child.codes[spec.name], child.grids[spec.name] = _decode(spec, stored, manifest)
+            child.codes[spec.name] = _codes(spec, stored.__getitem__, manifest)
+            child.grids[spec.name] = _grid(spec, stored.__getitem__, manifest)
         else:
             child.full_precision[spec.name] = stored[spec.name]
     return child
 
 
-def child_state_dict(child: Child, manifest: Manifest) -> dict[str, Tensor]:
+def child_state_dict(
+    child: Child, manifest: Manifest, dtype: torch.dtype = torch.float32
+) -> dict[str, Tensor]:
     """Dequantized weights of a single child, ready for ``load_state_dict``."""
-    scheme = manifest.scheme
-    weights = {
-        name: child_weights(
-            codes, child.grids[name], child.index, scheme.num_children, scheme.phase
-        )
-        for name, codes in child.codes.items()
-    }
-    return _assemble(weights, child, manifest)
-
-
-def rebuild_state_dict(children: Sequence[Child], manifest: Manifest) -> dict[str, Tensor]:
-    """Weights rebuilt from any set of distinct children.
-
-    With all N children the rebuild is exact and checked against the manifest's parent hash;
-    with fewer it is the partial rebuild by interval intersection.
-
-    Raises:
-        ShardError: If ``children`` is empty, repeats an index, or a complete set does not
-            reproduce the parent's hash.
-    """
-    _check_distinct(children)
-    if len(children) == manifest.scheme.num_children:
-        weights = _rebuild_exact(children, manifest)
-    else:
-        weights = _rebuild_partial(children, manifest)
-    return _assemble(weights, children[0], manifest)
-
-
-def _rebuild_exact(children: Sequence[Child], manifest: Manifest) -> dict[str, Tensor]:
-    scheme, digest, weights = manifest.scheme, hashlib.sha256(), {}
+    state = dict(child.full_precision)
     for spec in manifest.quantized():
-        codes = parent_codes([child.codes[spec.name] for child in children])
-        update_codes_hash(digest, spec.name, codes)
-        grid = children[0].grids[spec.name]
-        weights[spec.name] = parent_weights(codes, grid, scheme.num_children, scheme.phase)
-    if digest.hexdigest() != manifest.parent_sha256:
-        raise ShardError("rebuilt parent codes do not match the manifest hash")
-    return weights
-
-
-def _rebuild_partial(children: Sequence[Child], manifest: Manifest) -> dict[str, Tensor]:
-    scheme = manifest.scheme
-    return {
-        spec.name: partial_weights(
-            {child.index: child.codes[spec.name] for child in children},
-            children[0].grids[spec.name],
-            scheme.num_children,
-            scheme.phase,
-        )
-        for spec in manifest.quantized()
-    }
-
-
-def _assemble(grouped: dict[str, Tensor], child: Child, manifest: Manifest) -> dict[str, Tensor]:
-    """Rotate grouped weights back, restore their shapes and add unquantized tensors."""
-    scheme, state = manifest.scheme, dict(child.full_precision)
-    rotation = None
-    if scheme.rotation_seed is not None:
-        rotation = random_rotation(scheme.group_size, scheme.rotation_seed)
-    for spec in manifest.quantized():
-        weights = grouped[spec.name]
-        if rotation is not None:
-            weights = weights @ rotation.T
-        state[spec.name] = weights.reshape(spec.shape)
+        estimate = _child_estimate(child.codes[spec.name], child.index, manifest)
+        state[spec.name] = _dequantize(spec, child.grids[spec.name], estimate, manifest, dtype)
     return state
 
 
-def _decode(spec: TensorSpec, stored: dict[str, Tensor], manifest: Manifest) -> tuple[Tensor, Grid]:
-    scheme = manifest.scheme
-    codes = unpack(stored[f"{spec.name}/codes"], scheme.bits, spec.numel)
-    grid = Grid(
-        minimum=stored[f"{spec.name}/minimum"].float().unsqueeze(1),
-        step=stored[f"{spec.name}/step"].float().unsqueeze(1),
-        bits=scheme.bits,
-    )
-    return codes.reshape(-1, scheme.group_size), grid
+def rebuild_from_files(
+    shards: Mapping[int, Path], manifest: Manifest, dtype: torch.dtype = torch.float32
+) -> dict[str, Tensor]:
+    """Weights rebuilt from the shard files of any set of children.
 
+    Every file is checked against the manifest before any is used. With all N children the
+    rebuild is exact and checked against the parent hash; with fewer it is the partial
+    rebuild by interval intersection.
 
-def _check_distinct(children: Sequence[Child]) -> None:
-    if not children:
+    Args:
+        shards: Path of each available child's shard, keyed by child index k.
+        manifest: The set's manifest.
+        dtype: Dtype of the rebuilt weights. They are computed in float32 and cast per chunk.
+
+    Raises:
+        ShardError: If ``shards`` is empty, a file does not match its hash, or a complete set
+            does not reproduce the parent hash.
+    """
+    if not shards:
         raise ShardError("at least one child is required")
-    indices = [child.index for child in children]
-    if len(set(indices)) != len(indices):
-        raise ShardError(f"repeated child indices: {sorted(indices)}")
+    for index, path in shards.items():
+        verify_shard(path, manifest, index)
+    return combine_shards(shards, manifest, dtype)
+
+
+def combine_shards(
+    shards: Mapping[int, Path], manifest: Manifest, dtype: torch.dtype = torch.float32
+) -> dict[str, Tensor]:
+    """The combining step of :func:`rebuild_from_files`, for files already verified.
+
+    Only call this on files that passed :func:`verify_shard`; it is separate so the two steps
+    can be timed apart. A complete set is still checked against the parent hash.
+
+    Raises:
+        ShardError: If a complete set does not reproduce the parent hash.
+    """
+    scheme, digest = manifest.scheme, hashlib.sha256()
+    exact = len(shards) == scheme.num_children
+    with ExitStack() as stack:
+        files = {k: stack.enter_context(safe_open(str(p), "pt")) for k, p in sorted(shards.items())}
+        first = next(iter(files.values()))
+        state = {s.name: first.get_tensor(s.name) for s in manifest.tensors if not s.quantized}
+        for spec in manifest.quantized():
+            if exact:
+                codes = parent_codes(_codes(spec, f.get_tensor, manifest) for f in files.values())
+                update_codes_hash(digest, spec.name, codes)
+                estimate = _parent_estimate(codes, manifest)
+            else:
+                available = {k: _codes(spec, f.get_tensor, manifest) for k, f in files.items()}
+                estimate = _partial_estimate(available, manifest)
+            grid = _grid(spec, first.get_tensor, manifest)
+            state[spec.name] = _dequantize(spec, grid, estimate, manifest, dtype)
+    if exact and digest.hexdigest() != manifest.parent_sha256:
+        raise ShardError("rebuilt parent codes do not match the manifest hash")
+    return state
+
+
+def _child_estimate(codes: Tensor, index: int, manifest: Manifest) -> Estimate:
+    n, phase = manifest.scheme.num_children, manifest.scheme.phase
+    return lambda rows, grid: child_weights(codes[rows], grid, index, n, phase)
+
+
+def _parent_estimate(codes: Tensor, manifest: Manifest) -> Estimate:
+    n, phase = manifest.scheme.num_children, manifest.scheme.phase
+    return lambda rows, grid: parent_weights(codes[rows], grid, n, phase)
+
+
+def _partial_estimate(available: Mapping[int, Tensor], manifest: Manifest) -> Estimate:
+    n, phase = manifest.scheme.num_children, manifest.scheme.phase
+    return lambda rows, grid: partial_weights(
+        {k: codes[rows] for k, codes in available.items()}, grid, n, phase
+    )
+
+
+def _dequantize(
+    spec: TensorSpec, grid: Grid, estimate: Estimate, manifest: Manifest, dtype: torch.dtype
+) -> Tensor:
+    """Run ``estimate`` over the groups in chunks, rotate back and restore the shape."""
+    rotation = manifest.rotation()
+    groups = grid.minimum.shape[0]
+    weights = torch.empty(groups, manifest.scheme.group_size, dtype=dtype)
+    for start in range(0, groups, CHUNK_GROUPS):
+        rows = slice(start, start + CHUNK_GROUPS)
+        chunk = estimate(rows, Grid(grid.minimum[rows], grid.step[rows], grid.bits))
+        weights[rows] = chunk if rotation is None else chunk @ rotation.T
+    return weights.reshape(spec.shape)
+
+
+def _codes(spec: TensorSpec, get: Getter, manifest: Manifest) -> Tensor:
+    scheme = manifest.scheme
+    codes = unpack(get(f"{spec.name}/codes"), scheme.bits, spec.numel)
+    return codes.reshape(-1, scheme.group_size)
+
+
+def _grid(spec: TensorSpec, get: Getter, manifest: Manifest) -> Grid:
+    return Grid(
+        minimum=get(f"{spec.name}/minimum").float().unsqueeze(1),
+        step=get(f"{spec.name}/step").float().unsqueeze(1),
+        bits=manifest.scheme.bits,
+    )

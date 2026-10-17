@@ -13,7 +13,7 @@ from safetensors.torch import save_file
 from torch import Tensor
 
 from syncytium.quant import Grid, Scheme, fit_grid, parent_codes, quantize_children, to_groups
-from syncytium.quant.rotation import random_rotation
+from syncytium.quant.rotation import random_rotation, random_signs
 from syncytium.shards.manifest import (
     MANIFEST_NAME,
     Manifest,
@@ -56,7 +56,11 @@ def write_children(
         _save(directory / shard_name(index), tensors | shared)
         for index, tensors in enumerate(children)
     )
-    manifest = Manifest(model, scheme, _specs(quantized, shared), hashes, parent_hash.hexdigest())
+    seed = scheme.rotation_seed
+    signs = None if seed is None else random_signs(scheme.group_size, seed)
+    manifest = Manifest(
+        model, scheme, _specs(quantized, shared), hashes, parent_hash.hexdigest(), signs
+    )
     manifest.save(directory / MANIFEST_NAME)
     return manifest
 

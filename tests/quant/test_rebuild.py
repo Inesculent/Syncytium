@@ -116,6 +116,15 @@ def test_mean_of_a_subset_averages_its_children(groups):
     assert torch.allclose(mean, expected)
 
 
+def test_parent_codes_accept_children_one_at_a_time(groups):
+    grid = fit_grid(groups, 3)
+    children = quantize_children(groups, grid, 4)
+    first = children[0].to(torch.int32)
+    summed = parent_codes(codes for codes in [first, *children[1:]])
+    assert torch.equal(summed, torch.stack(children).to(torch.int32).sum(dim=0))
+    assert torch.equal(first, children[0].to(torch.int32))  # inputs are not modified
+
+
 def test_rebuild_requires_at_least_one_child(groups):
     grid = fit_grid(groups, 4)
     with pytest.raises(ValueError, match="at least one child"):

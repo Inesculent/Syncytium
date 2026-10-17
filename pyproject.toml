@@ -57,6 +57,7 @@ dev = [
 syncytium-sweep = "syncytium.sweep.cli:main"
 syncytium-report = "syncytium.report.cli:main"
 syncytium-shard = "syncytium.shards.cli:main"
+syncytium-rebuild = "syncytium.shards.cli:rebuild_main"
 syncytium-pool = "syncytium.pool.cli:main"
 
 [tool.hatch.version]

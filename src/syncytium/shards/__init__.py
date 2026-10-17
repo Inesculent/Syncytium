@@ -2,7 +2,14 @@
 
 from syncytium.shards.manifest import MANIFEST_NAME, Manifest, ShardError, TensorSpec, shard_name
 from syncytium.shards.packing import pack, packed_size, unpack
-from syncytium.shards.reader import Child, child_state_dict, read_child, rebuild_state_dict
+from syncytium.shards.reader import (
+    Child,
+    child_state_dict,
+    combine_shards,
+    read_child,
+    rebuild_from_files,
+    verify_shard,
+)
 from syncytium.shards.writer import write_children
 
 __all__ = [
@@ -12,11 +19,13 @@ __all__ = [
     "ShardError",
     "TensorSpec",
     "child_state_dict",
+    "combine_shards",
     "pack",
     "packed_size",
     "read_child",
-    "rebuild_state_dict",
+    "rebuild_from_files",
     "shard_name",
     "unpack",
+    "verify_shard",
     "write_children",
 ]

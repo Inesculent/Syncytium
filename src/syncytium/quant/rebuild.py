@@ -1,6 +1,6 @@
 """Rebuilding the parent from children (``docs/method.md``, "Rebuild" and "Partial rebuild")."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from enum import StrEnum
 
 import torch
@@ -17,15 +17,24 @@ class Estimator(StrEnum):
     MEAN = "mean"  # mean_weights: average of the surviving children
 
 
-def parent_codes(children: Sequence[Tensor]) -> Tensor:
+def parent_codes(children: Iterable[Tensor]) -> Tensor:
     """Sum the codes of all N children: Q = Σ_k q_k = ⌊N x + φ⌋ by Hermite's identity.
+
+    The sum is accumulated one child at a time, so ``children`` may be a generator that
+    loads each child's codes only when they are needed.
 
     Raises:
         ValueError: If ``children`` is empty.
     """
-    if not children:
+    total = None
+    for codes in children:
+        if total is None:
+            total = codes.to(torch.int32, copy=True)
+        else:
+            total += codes
+    if total is None:
         raise ValueError("at least one child is required")
-    return torch.stack([codes.to(torch.int32) for codes in children]).sum(dim=0)
+    return total
 
 
 def parent_weights(codes: Tensor, grid: Grid, num_children: int, phase: float = 0.0) -> Tensor:

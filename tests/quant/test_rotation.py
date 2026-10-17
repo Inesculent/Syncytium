@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from syncytium.quant import Scheme, simulate_child, simulate_rebuild
-from syncytium.quant.rotation import hadamard, random_rotation
+from syncytium.quant.rotation import hadamard, random_rotation, random_signs, signed_hadamard
 
 
 def test_hadamard_of_order_two():
@@ -29,6 +29,22 @@ def test_random_rotation_is_orthogonal():
 def test_random_rotation_depends_only_on_the_seed():
     assert torch.equal(random_rotation(64, seed=3), random_rotation(64, seed=3))
     assert not torch.equal(random_rotation(64, seed=3), random_rotation(64, seed=4))
+
+
+def test_random_signs_are_pinned():
+    # Phase 1 results depend on these exact signs; a change in PyTorch's generator would
+    # silently change every rotated condition.
+    assert random_signs(8, seed=0) == (-1, 1, 1, -1, 1, 1, 1, 1)
+
+
+def test_random_rotation_is_the_signed_hadamard_of_its_signs():
+    assert torch.equal(random_rotation(32, seed=5), signed_hadamard(random_signs(32, seed=5)))
+
+
+@pytest.mark.parametrize("signs", [(1, 0), (1, 2), (1, -1, 1)])
+def test_signed_hadamard_rejects_invalid_signs(signs):
+    with pytest.raises(ValueError, match=r"sign|power of two"):
+        signed_hadamard(signs)
 
 
 @pytest.fixture

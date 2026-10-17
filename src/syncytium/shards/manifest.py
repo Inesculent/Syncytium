@@ -2,7 +2,9 @@
 
 Every node keeps a copy. It records the scheme, the shape of every tensor, the SHA-256 of
 each child's shard file and the SHA-256 of the parent's integer codes, so a rebuild can
-prove it reproduced the parent bit for bit.
+prove it reproduced the parent bit for bit. With a rotation it also stores the rotation's
+signs: the parent hash covers codes in the rotated basis, so a reader that derived different
+signs from the seed would pass the hash check and still return wrong weights.
 """
 
 import hashlib
@@ -15,9 +17,12 @@ from pathlib import Path
 from torch import Tensor
 
 from syncytium.quant import Scheme
+from syncytium.quant.rotation import signed_hadamard
 
 FORMAT = "syncytium-shards/1"
 MANIFEST_NAME = "manifest.json"
+# Codes hashed at once. Bounds the temporary int32 copy for large tensors.
+HASH_CHUNK = 1 << 24
 
 
 class ShardError(ValueError):
@@ -40,14 +45,37 @@ class TensorSpec:
 
 @dataclass(frozen=True)
 class Manifest:
-    """Description of a complete set of N children."""
+    """Description of a complete set of N children.
+
+    Attributes:
+        rotation_signs: Diagonal of D in the rotation R = D H / √g, or ``None`` without
+            rotation. Readers use these rather than regenerating them from the seed.
+
+    Raises:
+        ShardError: If the scheme has a rotation and ``rotation_signs`` does not hold one
+            sign per group element, or has signs without a rotation.
+    """
 
     model: str
     scheme: Scheme
     tensors: tuple[TensorSpec, ...]
     shard_sha256: tuple[str, ...]
     parent_sha256: str
+    rotation_signs: tuple[int, ...] | None = None
     format: str = FORMAT
+
+    def __post_init__(self) -> None:
+        if self.scheme.rotation_seed is None:
+            if self.rotation_signs is not None:
+                raise ShardError("manifest has rotation signs but no rotation")
+        elif self.rotation_signs is None or len(self.rotation_signs) != self.scheme.group_size:
+            raise ShardError(f"a rotated manifest needs {self.scheme.group_size} rotation signs")
+
+    def rotation(self) -> Tensor | None:
+        """The shared rotation R, or ``None`` without rotation."""
+        if self.rotation_signs is None:
+            return None
+        return signed_hadamard(self.rotation_signs)
 
     def quantized(self) -> Iterator[TensorSpec]:
         """Specs of the quantized tensors, in hashing order."""
@@ -75,7 +103,12 @@ class Manifest:
             ),
             shard_sha256=tuple(raw["shard_sha256"]),
             parent_sha256=raw["parent_sha256"],
+            rotation_signs=_optional_tuple(raw.get("rotation_signs")),
         )
+
+
+def _optional_tuple(values: list[int] | None) -> tuple[int, ...] | None:
+    return None if values is None else tuple(values)
 
 
 def shard_name(index: int) -> str:
@@ -95,4 +128,5 @@ def file_sha256(path: Path) -> str:
 def update_codes_hash(digest: "hashlib._Hash", name: str, codes: Tensor) -> None:
     """Add one tensor's parent codes (as little-endian int32) to a running hash."""
     digest.update(name.encode())
-    digest.update(codes.to("cpu").int().contiguous().numpy().astype("<i4").tobytes())
+    for chunk in codes.reshape(-1).split(HASH_CHUNK):
+        digest.update(chunk.to("cpu").int().contiguous().numpy().astype("<i4").tobytes())

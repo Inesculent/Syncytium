@@ -1,4 +1,8 @@
-"""Command line: ``syncytium-shard MODEL --out DIR [scheme options]``."""
+"""Command lines for shard files.
+
+``syncytium-shard MODEL --out DIR [scheme options]`` writes the children;
+``syncytium-rebuild DIR [--children K ...] [--repeat R]`` times rebuilds from them.
+"""
 
 import argparse
 from collections.abc import Sequence
@@ -9,6 +13,7 @@ import torch
 from syncytium.models import load_model, split_parameters
 from syncytium.quant import Scheme
 from syncytium.shards.manifest import shard_name
+from syncytium.shards.timing import log_timing, time_rebuild
 from syncytium.shards.writer import write_children
 
 
@@ -29,3 +34,20 @@ def main(argv: Sequence[str] | None = None) -> None:
     for index in range(scheme.num_children):
         size = (args.out / shard_name(index)).stat().st_size
         print(f"{shard_name(index)}  {size / 1e9:.3f} GB")
+
+
+def rebuild_main(argv: Sequence[str] | None = None) -> None:
+    """Rebuild weights from shard files, time it and log the timing next to the shards."""
+    parser = argparse.ArgumentParser(description=rebuild_main.__doc__)
+    parser.add_argument("directory", type=Path, help="directory written by syncytium-shard")
+    parser.add_argument("--children", type=int, nargs="+", help="child indices; default all")
+    parser.add_argument("--repeat", type=int, default=1, help="number of timed rebuilds")
+    args = parser.parse_args(argv)
+    for _ in range(args.repeat):
+        timing = time_rebuild(args.directory, args.children)
+        log_timing(args.directory, timing)
+        kind = "exact" if timing.exact else "partial"
+        print(
+            f"{kind} rebuild from {list(timing.children)}: {timing.bytes_read / 1e9:.3f} GB, "
+            f"verify {timing.verify_seconds:.1f} s + rebuild {timing.rebuild_seconds:.1f} s"
+        )

@@ -2,6 +2,7 @@ import pytest
 import torch
 
 from syncytium.shards import pack, packed_size, unpack
+from syncytium.shards import packing as packing_module
 
 
 @pytest.mark.parametrize("bits", range(1, 9))
@@ -11,6 +12,14 @@ def test_round_trip(bits, count):
     packed = pack(codes.to(torch.uint8), bits)
     assert packed.numel() == packed_size(count, bits)
     assert torch.equal(unpack(packed, bits, count), codes.to(torch.uint8))
+
+
+@pytest.mark.parametrize("bits", range(1, 9))
+def test_unpacking_in_chunks_gives_the_same_codes(bits, monkeypatch):
+    codes = torch.randint(0, 2**bits, (1001,), generator=torch.Generator().manual_seed(bits))
+    packed = pack(codes.to(torch.uint8), bits)
+    monkeypatch.setattr(packing_module, "CHUNK_CODES", 16)
+    assert torch.equal(unpack(packed, bits, 1001), codes.to(torch.uint8))
 
 
 def test_three_bit_layout_is_least_significant_bit_first():

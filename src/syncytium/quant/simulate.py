@@ -59,7 +59,7 @@ def simulate_rebuild(
         x = normalize(groups, grid)
         codes = {k: child_codes(x, grid, k, n, phase) for k in available}
         if len(codes) == n:
-            return parent_weights(parent_codes(list(codes.values())), grid, n, phase)
+            return parent_weights(parent_codes(codes.values()), grid, n, phase)
         return partial(codes, grid, n, phase)
 
     return _map_groups(weight, scheme, rebuild)
