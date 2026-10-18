@@ -92,3 +92,19 @@ def test_a_drop_needs_the_full_group_first(tiny_model, tokenizer, data, tmp_path
     drops = [c for c in plan(SETTING.children, drop=True) if c.kind == "drop"]
     with pytest.raises(FileNotFoundError, match="must run first"):
         TaskRun(tiny_model, tokenizer, config(tmp_path), data).run(drops)
+
+
+def test_confirmation_runs_log_round_to_nearest_and_dataset_positions(
+    tiny_model, tokenizer, data, tmp_path
+):
+    from dataclasses import replace
+
+    shifted = replace(
+        config(tmp_path), gsm8k=GSM8KConfig(offset=64, batch_size=2, max_new_tokens=4)
+    )
+    conditions = plan(SETTING.children, drop=False, full_only=True, rtn_bits=(6,))
+    TaskRun(tiny_model, tokenizer, shifted, data).run(conditions)
+    summary = {row["id"] for row in read(tmp_path / "results.jsonl")}
+    assert "gsm8k/rtn/b6" in summary
+    assert "gsm8k/group/k0,1" in summary
+    assert [a["problem"] for a in read(items_path(tmp_path, "gsm8k", "rtn/b6"))] == [64, 65, 66]

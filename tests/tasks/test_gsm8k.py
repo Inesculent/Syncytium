@@ -50,3 +50,29 @@ def test_missing_prediction_is_wrong():
 )
 def test_truncate_stops_at_the_first_stop_sequence(text, expected):
     assert gsm8k.truncate(text) == expected
+
+
+@pytest.fixture
+def dataset(monkeypatch):
+    from datasets import Dataset
+
+    rows = Dataset.from_dict(
+        {"question": [f"q{i}" for i in range(10)], "answer": [f"... #### {i}" for i in range(10)]}
+    )
+    monkeypatch.setattr(gsm8k, "load_dataset", lambda *args, **kwargs: rows)
+
+
+@pytest.mark.parametrize(
+    ("limit", "offset", "expected"),
+    [
+        (None, 0, list(range(10))),
+        (3, 0, [0, 1, 2]),
+        (3, 4, [4, 5, 6]),
+        (None, 8, [8, 9]),
+        (5, 8, [8, 9]),
+    ],
+)
+def test_problems_are_taken_in_order_from_the_offset(dataset, limit, offset, expected):
+    problems = gsm8k.load_gsm8k("train", limit, offset)
+    assert [p.question for p in problems] == [f"q{i}" for i in expected]
+    assert [p.answer for p in problems] == [str(i) for i in expected]

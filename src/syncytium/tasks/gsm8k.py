@@ -80,11 +80,12 @@ class Problem:
     answer: str
 
 
-def load_gsm8k(split: str, limit: int | None = None) -> list[Problem]:
-    """Problems of a GSM8K split, in dataset order; ``limit`` keeps the first few."""
+def load_gsm8k(split: str, limit: int | None = None, offset: int = 0) -> list[Problem]:
+    """Problems of a GSM8K split in dataset order, from ``offset``, at most ``limit``."""
     rows = load_dataset(*GSM8K, split=split)
-    if limit is not None:
-        rows = rows.select(range(min(limit, len(rows))))
+    end = len(rows) if limit is None else min(offset + limit, len(rows))
+    if (offset, end) != (0, len(rows)):
+        rows = rows.select(range(offset, end))
     return [Problem(row["question"], reference(row["answer"])) for row in rows]
 
 

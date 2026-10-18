@@ -42,3 +42,25 @@ def test_scaled_scheme_needs_scales():
     scaled = Scheme(bits=3, group_size=64, num_children=4, scaling=True)
     with pytest.raises(ValueError, match="no calibration"):
         TaskCondition(Kind.CHILD, (0,)).transform(scaled, Estimator.MEAN)
+
+
+def test_full_only_plans_keep_one_group_and_add_round_to_nearest_models():
+    ids = [c.id for c in plan(4, drop=False, full_only=True, rtn_bits=(6, 8))]
+    assert ids == [
+        "bf16",
+        "child/k0",
+        "child/k1",
+        "child/k2",
+        "child/k3",
+        "group/k0,1,2,3",
+        "rtn/b6",
+        "rtn/b8",
+    ]
+
+
+def test_round_to_nearest_is_the_sweeps_single_model(groups):
+    weight = groups.reshape(16, -1)
+    rotated = Scheme(bits=3, group_size=64, num_children=4, phase=0.5, rotation_seed=0)
+    single = Scheme(bits=6, group_size=64, num_children=1, phase=0.5, rotation_seed=0)
+    transform = TaskCondition(Kind.RTN, bits=6).transform(rotated, Estimator.MEAN)
+    assert torch.equal(transform("w", weight), simulate_child(weight, single, 0))

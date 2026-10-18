@@ -14,7 +14,9 @@ class SwarmSetting:
 
     ``estimator`` is how groups smaller than the full set combine their children; the
     pre-registration fixes it as "mean" unless ``pool-2b`` shows the midpoint better. With
-    ``drop``, the full group also loses each member halfway through its answers (H13).
+    ``drop``, the full group also loses each member halfway through its answers (H13). With
+    ``full_only``, the full group is the only group. ``rtn_bits`` adds round-to-nearest single
+    models at those bit widths, with the children's group size, rotation and scaling.
     """
 
     bits: int
@@ -26,6 +28,8 @@ class SwarmSetting:
     seed: int = 0
     estimator: str = "mean"
     drop: bool = True
+    full_only: bool = False
+    rtn_bits: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if self.children < 2:
@@ -41,10 +45,14 @@ class SwarmSetting:
 
 @dataclass(frozen=True)
 class GSM8KConfig:
-    """How GSM8K is run. The test split is first run by the pre-registered configuration."""
+    """How GSM8K is run. The test split is first run by the pre-registered configuration.
+
+    Problems are taken in dataset order from ``offset``, at most ``limit`` of them.
+    """
 
     split: str = "test"
     limit: int | None = None
+    offset: int = 0
     batch_size: int = 32
     max_new_tokens: int = 256
 
@@ -86,7 +94,9 @@ def load_task_config(path: Path) -> TaskConfig:
         output=Path(raw["output"]),
         model=ModelConfig(**raw["model"]),
         evaluation=EvalConfig(**raw.get("eval", {})),
-        setting=SwarmSetting(**raw["setting"]),
+        setting=SwarmSetting(
+            **{k: tuple(v) if isinstance(v, list) else v for k, v in raw["setting"].items()}
+        ),
         gsm8k=GSM8KConfig(**raw["gsm8k"]) if "gsm8k" in raw else None,
         mmlu=MMLUConfig(**raw["mmlu"]) if "mmlu" in raw else None,
     )

@@ -55,14 +55,16 @@ def run_tasks(config: TaskConfig, config_path: Path) -> None:
             model, windows(train, evaluation.calibration_window, evaluation.calibration_windows)
         )
     run = TaskRun(model, tokenizer, config, load_data(config, tokenizer), scales)
-    run.run(plan(config.setting.children, config.setting.drop))
+    setting = config.setting
+    run.run(plan(setting.children, setting.drop, setting.full_only, setting.rtn_bits))
 
 
 def load_data(config: TaskConfig, tokenizer: Any) -> TaskData:
     """Load and tokenize the tasks a run evaluates."""
     problems, questions, shots = [], [], {}
     if config.gsm8k is not None:
-        problems = gsm8k.load_gsm8k(config.gsm8k.split, config.gsm8k.limit)
+        settings = config.gsm8k
+        problems = gsm8k.load_gsm8k(settings.split, settings.limit, settings.offset)
     if config.mmlu is not None:
         questions = mmlu.load_mmlu(config.mmlu.split, config.mmlu.limit)
         shots = mmlu.shots_by_subject(mmlu.load_mmlu("dev"))
@@ -174,6 +176,7 @@ class TaskRun:
         prediction = gsm8k.extract(completion.text)
         return {
             "index": index,
+            "problem": self.config.gsm8k.offset + index,
             "gold": gold,
             "prediction": prediction,
             "correct": gsm8k.is_correct(prediction, gold),

@@ -1,0 +1,30 @@
+# H8b and H10b of docs/preregistration-disagreement.md at 9B: each lone child, the full
+# group, bf16 and a 6-bit round-to-nearest model (the static splits' large model) on 1,319
+# GSM8K train problems, numbers 64 to 1,382 (the first 64 were used by the smoke run). The
+# setting is swarm-9b's. Report with:
+#   syncytium-speed confirm configs/speed-9b.toml results/confirm-9b
+name = "confirm-9b"
+output = "results/confirm-9b"
+
+[model]
+path = "Qwen/Qwen3.5-9B-Base"
+
+[setting]
+bits = 3
+group_size = 64
+children = 4
+phase = 0.5
+rotation = true
+scaling = true
+seed = 0
+estimator = "mean"
+drop = false
+full_only = true
+rtn_bits = [6]
+
+[gsm8k]
+split = "train"
+offset = 64
+limit = 1319
+batch_size = 32
+max_new_tokens = 256
