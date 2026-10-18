@@ -1,0 +1,24 @@
+# H9 of the swarm pre-registration (docs/preregistration-swarm.md) at 9B: how often each
+# lone 3-bit child's greedy choice matches the full group's, on 16 windows of 2048 tokens from
+# the WikiText-2 test split, and the simulated tokens per speculative cycle for draft lengths
+# 1 to 8. The setting is swarm-9b's. The run needs a GPU; "syncytium-speed report" then
+# adds the traced rounds and the network model on any machine.
+name = "speed-9b"
+output = "results/speed-9b"
+
+[model]
+path = "Qwen/Qwen3.5-9B-Base"
+
+[setting]
+bits = 3
+group_size = 64
+children = 4
+phase = 0.5
+rotation = true
+scaling = true
+seed = 0
+
+[acceptance]
+windows = 16
+window = 2048
+drafts = [1, 2, 3, 4, 5, 6, 7, 8]

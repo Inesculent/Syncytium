@@ -52,7 +52,9 @@ def test_rejects_empty_lists(tmp_path):
 
 
 SWEEP_CONFIGS = [
-    p for p in sorted(Path("configs").glob("*.toml")) if not p.stem.startswith(("pool-", "swarm-"))
+    p
+    for p in sorted(Path("configs").glob("*.toml"))
+    if not p.stem.startswith(("pool-", "swarm-", "speed-"))
 ]
 
 

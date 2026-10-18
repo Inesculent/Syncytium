@@ -285,3 +285,27 @@ correct the description of the storage cost and of which losses each scheme surv
   *N* − *t* − 1 bytes of padding.
 - *"Full health" includes the regrowth data.* The regrowth files of lost members are rebuilt
   too, and must match their recorded hashes.
+
+**2026-10-18, H9 model, fixed before any agreement was measured.** H9 left the collective
+algorithms and the acceptance measurement open. A rough estimate made while choosing them put
+fused decoding without speculation near the 25% bar, so the choices below are the standard
+ones rather than the most favourable, and they are recorded before any H9 number exists.
+
+- *Rounds.* Traced on the model built without weights: the output of every quantized linear
+  or embedding layer is averaged before anything else reads it, and layers reading the same
+  input share a round. Qwen3.5 has 4 per decoder layer plus the embedding and the output head
+  (130 at 9B).
+- *Time per fused pass.* One read of the child's weights at the device's memory bandwidth,
+  plus every round; compute, KV-cache reads and any overlap of communication with computation
+  are ignored. Activations are bf16. Each device has a full-duplex link of the stated
+  bandwidth to a switch, and each step of a collective costs one latency.
+- *Collectives.* Each round is an all-reduce by whichever is faster of a direct exchange (one
+  step, each device sends its vector to every other) and a reduce-scatter followed by an
+  all-gather (two steps, 2(*N* − 1)/*N* of the vector each). The output logits need only
+  their argmax: a reduce-scatter, then an exchange of each slice's best value and index.
+- *Speculative decoding.* The requesting agent drafts *k* tokens alone (*k* solo passes), and
+  the group checks them in one pass over *k* + 1 positions. Agreement is measured
+  teacher-forced on 16 windows of 2,048 tokens from the WikiText-2 test split: a position
+  agrees when the lone child's greedy choice equals the full group's. Tokens per cycle are
+  simulated along that text, with no independence assumption. The drafter is the child that
+  agrees least, and *k* is the best of 0 (no speculation) to 8; every *k* is reported.
