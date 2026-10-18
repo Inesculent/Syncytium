@@ -63,10 +63,14 @@ child of that stage (see [method](method.md#pooled-pipeline)). Then:
   predicted by adding the increases of each affected stage measured on its own, with
   **R² ≥ 0.9** across patterns.
 
-*Proposed on 2026-10-17, before any pooled sweep beyond a pipeline check (`pool-screen-0.8b`)
-ran. The thresholds are not fixed until confirmed here.* Which stage is most sensitive, and how
-much the mean estimator loses against the interval midpoint, are exploratory questions with no
-threshold.
+*Proposed on 2026-10-17 and fixed on 2026-10-18, before any pooled sweep beyond the pipeline
+check (`pool-screen-0.8b`) was examined. H6b and H6c are evaluated under the mean estimator,
+the only one the devices can compute without exchanging codes, and separately on `pool-0.8b`
+(4-bit, rotated) and `pool-2b` (3-bit, rotated and scaled); each run passes or fails on its
+own. Known when fixing: in the main sweeps, losing one child from every stage at once costs
+0.22 and 0.38 perplexity at these two settings (midpoint estimator), so H6b is expected to
+pass; H6c is the informative test.* Which stage is most sensitive, and how much the mean
+estimator loses against the interval midpoint, are exploratory questions with no threshold.
 
 ## Goals
 
@@ -86,8 +90,8 @@ threshold.
 
 ## Evaluation protocol
 
-**Models.** Qwen3.5 Base at 0.8B, 2B and 4B locally; 9B on a GPU cluster. Base checkpoints are
-used because perplexity is the primary metric.
+**Models.** Qwen3.5 Base at 0.8B, 2B, 4B and 9B; the 0.8B pilot ran locally and the rest on a
+GPU cluster. Base checkpoints are used because perplexity is the primary metric.
 
 **Configuration grid.**
 
@@ -97,6 +101,7 @@ used because perplexity is the primary metric.
 | Number of children| 2, 4, 8                    |
 | Group size        | 64 (32 and 128 as ablation)|
 | Shared rotation   | off, on                    |
+| Channel scaling   | off, on (*N* = 4, φ = ½)   |
 
 **Measurements.**
 
@@ -163,6 +168,22 @@ lower end with rotation) and over 2000x at 2 bits. The threshold therefore separ
 3 bits at 0.8B and leaves 3-bit children with rotation as an open question for the larger
 models. H4 is evaluated only for *N* ≥ 3, since with *N* = 2 any *N* − 1 children are a
 single child. Any later change is recorded here with its reason.
+
+**Criteria for the follow-up runs, fixed on 2026-10-18 before their results were examined.**
+These test claims made in the [phase 1 report](results/phase-1-report.md) from a single
+rotation seed or a single model size.
+
+- *Seed robustness* (`seed1-9b`, `seed2-9b`, with seed 0 from `scaling-9b`). The claim that a
+  scaled, rotated child is within **0.05** perplexity of the scaled, rotated round-to-nearest
+  model of the same size at 9B holds if, for each of seeds 0, 1 and 2, the worst child at 3
+  and at 4 bits (*N* = 4, φ = ½) is within 0.05 of the round-to-nearest model with the same
+  seed. The spread across the three seeds is reported as the uncertainty of every setting
+  comparison at 9B.
+- *Survivor ordering at 4B* (`subsets-4b`). H4's strict ordering, that the worst rebuild from
+  any *k* + 1 of four children beats the best from any *k*, and the ordering of two-child
+  rebuilds, that every pair with offsets ½ apart beats every pair with adjacent offsets, each
+  hold if they hold in every setting of the run.
+- `demo-2b` measures the demo's scheme and has no threshold.
 
 ## Origin of the hypothesis
 
