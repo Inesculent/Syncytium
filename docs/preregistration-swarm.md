@@ -234,4 +234,54 @@ measures task accuracy.
 
 ## Changes after fixing
 
-None yet.
+**2026-10-18, clarifications made while building the harness, before any GSM8K or MMLU test
+result existed.** None changes a threshold; each fixes a detail the text above left open.
+
+- *GSM8K protocol.* The prompt is the eight exemplars of Wei et al. (2022) as "Q: … A: …"
+  pairs separated by blank lines, ending in "Q: {question}\nA:". An answer is the generated
+  text up to its first blank line or "Q:", at most 256 tokens. "Compared exactly" means the
+  last number in the answer, thousands separators removed, equals the reference as a number
+  (18, 18.0 and 18.00 agree).
+- *MMLU protocol.* The prompt is "The following are multiple choice questions (with answers)
+  about {subject}." followed by the subject's five dev questions, each as the question, the
+  options "A. …" to "D. …" and "Answer: {letter}", then the question itself ending in
+  "Answer:". The prediction is whichever of " A", " B", " C" and " D" is most likely next.
+- *Entropy (H8).* For each answer token, the entropy in nats of the model's full next-token
+  distribution, averaged over the answer's tokens.
+- *H7.* If the worst lone child is at least as accurate as bf16, there is no gap to recover
+  and H7 fails.
+- *H8.* Judged on the worst lone child, the one H7 uses, escalating exactly the ⌈0.3 *n*⌉
+  answers with the highest entropy (ties broken by problem order). The other children are
+  reported for reference. "The H7 gain" for a child is the full group's accuracy minus that
+  child's.
+- *H11.* "Beats" is strict: the worst three-child group is more accurate than the best lone
+  child.
+- *H13.* For an answer of *L* tokens from the full group, the full group reads the prompt and
+  its first ⌊*L*/2⌋ answer tokens and chooses the next one; the survivors write the rest from
+  the full group's cache, up to 256 answer tokens in all. "Survivors answering from scratch"
+  is the three-child group's own run, with the same estimator.
+- *Channel scales.* Calibrated exactly as in phase 1 (`scaling-*`): 64 windows of 512 tokens
+  from the WikiText-2 train split.
+
+**2026-10-18, H14 details found while implementing regrowth.** These were recorded after the
+H14 and H15 unit tests first ran. None changes their pass criterion, a hash match; they
+correct the description of the storage cost and of which losses each scheme survives.
+
+- *"Exactly 2/N" assumes uniform residues.* On real weights each group's minimum and maximum
+  have residue 0, where children 0 and *N* − 1 are ambiguous, so their neighbour bits cost
+  about 2/*N* + 2/*g* (+0.03 at *g* = 64). The other children cost slightly less than 2/*N*,
+  and the average stays within 5% of 2/*N*. Survivors compute the number of bits to read.
+- *Range ends.* For child 0 at the bottom of the range (candidates −1 and 0), and child
+  *N* − 1 at the top (2^*b* − 1 and 2^*b*), one candidate is out of range, so the code is
+  determined. These weights are still counted as ambiguous, from the neighbours' codes alone,
+  and a bit is stored. Phase ½ changes nothing.
+- *Neighbour bits survive more than one loss.* Regrowing child *j* needs only children
+  *j* − 1 and *j* + 1 and the bits held by *j* + 1. So any set of losses with no two
+  cyclically adjacent members is regrown exactly, not only single losses. Adjacent losses,
+  including the pair (*N* − 1, 0), are refused with an error.
+- *The coded residue costs ⌈log₂ N⌉/(N − t).* Residues are packed to whole bits, which
+  equals log₂ *N* when *N* is a power of two. For *N* = 100 the table's values become 0.07
+  (*t* = 1), 0.09 (*t* = 25) and **0.14** (*t* = 50), not 0.13. Each tensor also adds at most
+  *N* − *t* − 1 bytes of padding.
+- *"Full health" includes the regrowth data.* The regrowth files of lost members are rebuilt
+  too, and must match their recorded hashes.

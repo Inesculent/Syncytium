@@ -1,0 +1,30 @@
+# Smoke test of the swarm task harness on the smallest model, end to end and quickly. It uses
+# only the GSM8K train split and the MMLU dev split: the pre-registration keeps both test splits
+# unseen until the fixed configurations (swarm-9b, swarm-4b) run. Its numbers mean nothing.
+name = "swarm-smoke-0.8b"
+output = "results/swarm-smoke-0.8b"
+
+[model]
+path = "Qwen/Qwen3.5-0.8B-Base"
+
+[setting]
+bits = 3
+group_size = 64
+children = 4
+phase = 0.5
+rotation = true
+scaling = true
+seed = 0
+estimator = "mean"
+drop = true
+
+[gsm8k]
+split = "train"
+limit = 64
+batch_size = 32
+max_new_tokens = 256
+
+[mmlu]
+split = "dev"
+limit = 64
+batch_size = 16

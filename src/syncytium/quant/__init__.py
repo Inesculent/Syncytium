@@ -8,6 +8,16 @@ from syncytium.quant.rebuild import (
     parent_weights,
     partial_weights,
 )
+from syncytium.quant.regrow import (
+    ambiguous,
+    approximate_regrowth,
+    check_staggered,
+    neighbour_bits,
+    parent_from_residues,
+    regrow_from_residues,
+    regrow_with_neighbour_bits,
+    residues,
+)
 from syncytium.quant.scaling import ChannelScales, search_scales
 from syncytium.quant.scheme import Scheme
 from syncytium.quant.simulate import simulate_child, simulate_rebuild
@@ -18,17 +28,25 @@ __all__ = [
     "Estimator",
     "Grid",
     "Scheme",
+    "ambiguous",
+    "approximate_regrowth",
+    "check_staggered",
     "child_codes",
     "child_weights",
     "fit_grid",
     "from_groups",
     "mean_weights",
+    "neighbour_bits",
     "normalize",
     "offset",
     "parent_codes",
+    "parent_from_residues",
     "parent_weights",
     "partial_weights",
     "quantize_children",
+    "regrow_from_residues",
+    "regrow_with_neighbour_bits",
+    "residues",
     "search_scales",
     "simulate_child",
     "simulate_rebuild",

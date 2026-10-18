@@ -59,7 +59,9 @@ syncytium-report = "syncytium.report.cli:main"
 syncytium-compare = "syncytium.report.cli:compare_main"
 syncytium-shard = "syncytium.shards.cli:main"
 syncytium-rebuild = "syncytium.shards.cli:rebuild_main"
+syncytium-regrow = "syncytium.shards.cli:regrow_main"
 syncytium-pool = "syncytium.pool.cli:main"
+syncytium-tasks = "syncytium.tasks.cli:main"
 
 [tool.hatch.version]
 path = "src/syncytium/__init__.py"

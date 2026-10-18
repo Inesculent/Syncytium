@@ -39,5 +39,18 @@ class WeightBank:
     @torch.no_grad()
     def restore(self) -> None:
         """Put the original weights back."""
+        self.load(self._originals)
+
+    @torch.no_grad()
+    def snapshot(self) -> dict[str, Tensor]:
+        """A CPU copy of the current weights, so they can be put back by :meth:`load`.
+
+        Switching between snapshots is a copy, much faster than applying a transform again.
+        """
+        return {name: w.detach().to("cpu", copy=True) for name, w in self._weights.items()}
+
+    @torch.no_grad()
+    def load(self, weights: Mapping[str, Tensor]) -> None:
+        """Write weights saved by :meth:`snapshot` into the model."""
         for name, weight in self._weights.items():
-            weight.copy_(self._originals[name])
+            weight.copy_(weights[name])

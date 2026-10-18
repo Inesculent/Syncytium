@@ -1,0 +1,31 @@
+# Gate A of the swarm pre-registration (docs/preregistration-swarm.md) at 9B: bf16, every lone
+# child, every fused group and the full group losing each member halfway through its answers,
+# on GSM8K (H7, H8, H11, H13) and MMLU (exploratory). 3-bit children, N = 4, φ = ½, rotated
+# and scaled, with the channel scales calibrated as in scaling-9b. Groups smaller than four use
+# the mean estimator unless pool-2b shows the midpoint more than 0.05 perplexity better with
+# one device lost; then set estimator = "midpoint" before the first run.
+name = "swarm-9b"
+output = "results/swarm-9b"
+
+[model]
+path = "Qwen/Qwen3.5-9B-Base"
+
+[setting]
+bits = 3
+group_size = 64
+children = 4
+phase = 0.5
+rotation = true
+scaling = true
+seed = 0
+estimator = "mean"
+drop = true
+
+[gsm8k]
+split = "test"
+batch_size = 32
+max_new_tokens = 256
+
+[mmlu]
+split = "test"
+batch_size = 16

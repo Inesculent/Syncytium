@@ -1,0 +1,29 @@
+# Gate A at 4B, the pre-registration's second size (docs/preregistration-swarm.md); identical to
+# swarm-9b apart from the model. Groups smaller than four use the mean estimator unless pool-2b
+# shows the midpoint more than 0.05 perplexity better with one device lost; then set
+# estimator = "midpoint" before the first run.
+name = "swarm-4b"
+output = "results/swarm-4b"
+
+[model]
+path = "Qwen/Qwen3.5-4B-Base"
+
+[setting]
+bits = 3
+group_size = 64
+children = 4
+phase = 0.5
+rotation = true
+scaling = true
+seed = 0
+estimator = "mean"
+drop = true
+
+[gsm8k]
+split = "test"
+batch_size = 32
+max_new_tokens = 256
+
+[mmlu]
+split = "test"
+batch_size = 16
