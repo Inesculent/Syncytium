@@ -17,8 +17,9 @@ from syncytium.models import WeightBank, load_model, load_tokenizer, quantized_w
 from syncytium.pool.conditions import PoolCondition, plan
 from syncytium.pool.config import PoolConfig, PoolGridConfig
 from syncytium.pool.layout import assign_stages, device_footprints
-from syncytium.quant import Scheme
+from syncytium.quant import ChannelScales, Scheme
 from syncytium.sweep.records import ResultLog, append_run_metadata
+from syncytium.sweep.runner import calibrate
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +28,17 @@ def run_pool(config: PoolConfig, config_path: Path) -> None:
     """Load the model and corpus named in ``config`` and evaluate its device states."""
     append_run_metadata(config.output / "runs.jsonl", config_path)
     model = load_model(config.model.path, config.model.device, getattr(torch, config.model.dtype))
-    ids = load_wikitext2(load_tokenizer(config.model.path))
-    batches = windows(ids, config.evaluation.window, config.evaluation.max_windows)
+    tokenizer = load_tokenizer(config.model.path)
+    evaluation = config.evaluation
+    batches = windows(load_wikitext2(tokenizer), evaluation.window, evaluation.max_windows)
     write_layout(config.output / "layout.json", model, config.pool)
     log = ResultLog(config.output / "results.jsonl")
-    run_states(plan(config.pool), model, batches, log, config.pool.stages)
+    scales = None
+    if config.pool.scaling:
+        train = load_wikitext2(tokenizer, split="train")
+        calibration = windows(train, evaluation.calibration_window, evaluation.calibration_windows)
+        scales = calibrate(model, calibration)
+    run_states(plan(config.pool), model, batches, log, config.pool.stages, scales)
 
 
 def run_states(
@@ -40,8 +47,13 @@ def run_states(
     batches: Tensor,
     log: ResultLog,
     num_stages: int,
+    scales: ChannelScales | None = None,
 ) -> None:
-    """Evaluate ``conditions``, skipping ones already logged and reusing equal-key results."""
+    """Evaluate ``conditions``, skipping ones already logged and reusing equal-key results.
+
+    ``scales`` are needed when the grid scales its channels (see
+    :func:`~syncytium.sweep.runner.calibrate`).
+    """
     weights = quantized_weights(model)
     bank = WeightBank(weights)
     stages = assign_stages(weights, num_stages)
@@ -53,7 +65,7 @@ def run_states(
         source = by_key.get(condition.key)
         if source is None:
             start = time.perf_counter()
-            transform = condition.transform(stages)
+            transform = condition.transform(stages, scales)
             if transform is None:
                 bank.restore()
             else:

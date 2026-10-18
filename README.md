@@ -3,8 +3,10 @@
 **Survive Anything:** low-precision LLM shards that each run on their own and together rebuild
 their parent model.
 
-> **Status: pre-alpha research.** The repository currently holds the project definition and
-> tooling. No experiment code has landed yet; see the [roadmap](#roadmap).
+> **Status: pre-alpha research.** Phase 1 (perplexity sweeps at 0.8B, 2B, 4B and 9B) is
+> complete apart from the pooled pipeline; results are in the
+> [phase 1 report](docs/results/phase-1-report.md). The container demo has its shard format
+> and nothing else yet; see the [roadmap](#roadmap).
 
 ## The idea
 
@@ -26,6 +28,8 @@ the rebuild, which is where the name comes from.
 
 ## Documents
 
+- [Phase 1 report](docs/results/phase-1-report.md): results so far, conclusions, and what
+  they mean for the container demo.
 - [Hypothesis and goals](docs/hypothesis.md): claims, success criteria, evaluation protocol.
 - [Method](docs/method.md): the quantization scheme, rebuild math and system design.
 - [Plan](docs/plan.md): stages, risks and decisions.
@@ -35,11 +39,12 @@ the rebuild, which is where the name comes from.
 
 ## Roadmap
 
-1. **Perplexity sweep.** Qwen3.5 0.8B, 2B and 4B (Base); children at 2, 3 and 4 bits;
-   *N* in {2, 4, 8}; with and without a shared rotation.
+1. **Perplexity sweep.** Qwen3.5 0.8B, 2B, 4B and 9B (Base); children at 2, 3 and 4 bits;
+   *N* in {2, 4, 8}; with and without a shared rotation and activation-aware channel scaling.
+   Done, except the pooled pipeline.
 2. **Container demo.** A main container and *N* child containers. The main container is
    destroyed and its filesystem wiped; the children keep serving and rebuild it when it returns.
-3. **Scale-up.** Qwen3.5 9B and larger on a GPU cluster.
+3. **Scale-up.** Qwen3.5 27B, zero-shot evaluations and a GPTQ reference on a GPU cluster.
 
 ## Requirements
 
@@ -99,7 +104,14 @@ An interrupted sweep resumes where it stopped when rerun with the same config.
 
 ```bash
 syncytium-report results/pilot-0.8b        # summary table and figures in docs/results/
-syncytium-compare results/pilot-0.8b results/sweep-4b results/sweep-9b   # sizes at equal memory
+syncytium-compare results/pilot-0.8b results/sweep-2b results/sweep-4b results/sweep-9b     --out docs/results/sizes                 # model sizes at equal memory per node
+```
+
+Pooled-pipeline configs (`configs/pool-*.toml`) run and report with their own command:
+
+```bash
+syncytium-pool run configs/pool-0.8b.toml
+syncytium-pool report results/pool-0.8b
 ```
 
 Larger models run on a SLURM cluster; see [running on a cluster](docs/cluster.md).

@@ -1,0 +1,24 @@
+# The container demo's scheme at 2B (phase 2): 4-bit children with group size 32, the layout
+# of llama.cpp's Q4_1 blocks, unrotated as llama.cpp needs and rotated as the pooled worker
+# allows, scaled and unscaled. Every survivor count for N = 4, so the demo's quality ladder
+# is measured before the containers exist. Q4_1 also rounds each block's offset to fp16, which
+# this simulation does not; the exported files still need their own check.
+name = "demo-2b"
+output = "results/demo-2b"
+
+[model]
+path = "Qwen/Qwen3.5-2B-Base"
+
+[eval]
+window = 2048
+
+[grid]
+bits = [4]
+group_sizes = [32]
+children = [4]
+phases = [0.5]
+rotation = [false, true]
+scaling = [false, true]
+seed = 0
+max_missing = 2
+rtn_bits = [4, 5, 6, 8]

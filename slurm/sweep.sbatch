@@ -12,6 +12,7 @@
 #
 # Runs one sweep config on one GPU. Submit through slurm/submit.sh, which creates the log
 # directory first. The SLURM account is read from SBATCH_ACCOUNT (see docs/cluster.md).
+# Configs with a [pool] table are pooled-pipeline sweeps and run with syncytium-pool.
 set -euo pipefail
 
 CONFIG="${1:?usage: sweep.sbatch CONFIG}"
@@ -20,4 +21,10 @@ source .venv/bin/activate
 
 echo "commit $(git rev-parse --short HEAD)  host $(hostname)  config ${CONFIG}"
 nvidia-smi -L
-PYTHONUNBUFFERED=1 syncytium-sweep "${CONFIG}"
+# Some nodes have failed CUDA initialization (error 101); stop here so the log names the node.
+python -c "import torch; assert torch.cuda.is_available(), 'CUDA unavailable on this node'"
+if grep -q '^\[pool\]' "${CONFIG}"; then
+    PYTHONUNBUFFERED=1 syncytium-pool run "${CONFIG}"
+else
+    PYTHONUNBUFFERED=1 syncytium-sweep "${CONFIG}"
+fi

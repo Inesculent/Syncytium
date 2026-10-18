@@ -17,7 +17,8 @@ class PoolGridConfig:
     sweep evaluates every single-device loss, every stage reduced to one child, and
     ``samples`` random patterns for each number of lost devices from 2 to ``max_lost``,
     under each estimator in ``estimators``. Rotated grids use the rotation drawn from
-    ``seed``; ``pattern_seed`` draws the random patterns.
+    ``seed``; scaled grids use activation-aware channel scales searched on calibration text;
+    ``pattern_seed`` draws the random patterns.
     """
 
     bits: int
@@ -26,6 +27,7 @@ class PoolGridConfig:
     stages: int
     phase: float = 0.0
     rotation: bool = False
+    scaling: bool = False
     seed: int = 0
     estimators: tuple[str, ...] = ("mean", "midpoint")
     max_lost: int = 4
@@ -52,7 +54,7 @@ class PoolGridConfig:
     def scheme(self) -> Scheme:
         """The quantization scheme shared by every stage."""
         seed = self.seed if self.rotation else None
-        return Scheme(self.bits, self.group_size, self.children, self.phase, seed)
+        return Scheme(self.bits, self.group_size, self.children, self.phase, seed, self.scaling)
 
 
 @dataclass(frozen=True)

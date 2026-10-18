@@ -165,7 +165,9 @@ and with independent device failure probability *p* the pipeline runs with proba
 `syncytium-pool` simulates this: for each state of the device grid it sets every stage's
 weights from that stage's surviving children and measures perplexity. Setting the weights to
 the children's mean is equivalent to averaging every linear layer's outputs, so the
-simulation matches the per-layer protocol above.
+simulation matches the per-layer protocol above. A rotation or channel scales, shared by
+every child, are linear and do not change this: each device dequantizes its own child in the
+original basis before multiplying.
 
 ## Baselines on the same nodes
 

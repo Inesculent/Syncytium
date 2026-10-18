@@ -1,0 +1,22 @@
+# Rotation seed 1 at 9B, for the variance of the headline settings (N = 4, phi = 1/2, 3 and 4
+# bits, rotated, scaled and unscaled). Every other run uses seed 0; comparing seed0 (from
+# scaling-9b), seed1 and seed2 shows which differences of a few hundredths are real.
+name = "seed1-9b"
+output = "results/seed1-9b"
+
+[model]
+path = "Qwen/Qwen3.5-9B-Base"
+
+[eval]
+window = 2048
+
+[grid]
+bits = [3, 4]
+group_sizes = [64]
+children = [4]
+phases = [0.5]
+rotation = [true]
+scaling = [false, true]
+seed = 1
+max_missing = 1
+rtn_bits = [3, 4]

@@ -28,11 +28,24 @@ If the GPU driver is older than 560, pick an older wheel index with `TORCH_INDEX
 
 ```bash
 bash slurm/submit.sh configs/sweep-4b.toml
-bash slurm/submit.sh configs/sweep-9b.toml --exclude=evc33 --time=48:00:00
+bash slurm/submit.sh configs/sweep-9b.toml --exclude=evc26 --time=48:00:00
 ```
 
 Anything after the config is passed to `sbatch`, so per-job overrides need no script edits.
-Node `evc33` has been excluded by other projects on this cluster.
+Exclude node `evc26`, which has been failing jobs. Node `evc33`, which other projects on this
+cluster used to exclude, was fixed by 2026-10-18.
+
+Pooled-pipeline configs go through the same script: a config with a `[pool]` table runs
+with `syncytium-pool run`, every other config with `syncytium-sweep`.
+
+```bash
+bash slurm/submit.sh configs/pool-0.8b.toml
+```
+
+Before evaluating anything, the job checks that PyTorch sees a GPU. Some nodes have failed
+CUDA initialization (error 101); such a job now stops at once with `CUDA unavailable on this
+node` in its `.err` log, and the node can be excluded with `--exclude=<node>` on
+resubmission.
 
 ## Monitoring and resuming
 
@@ -48,4 +61,5 @@ Node `evc33` has been excluded by other projects on this cluster.
 - Results are written under `results/<name>/` in the repository on Lustre. Copy them back
   for analysis, for example:
   `rsync -av <cluster>:Syncytium/results/sweep-9b results/`
-- `syncytium-report results/<name>` then writes the summary and figures to `docs/results/`.
+- `syncytium-report results/<name>` then writes the summary and figures to `docs/results/`;
+  for pooled sweeps, `syncytium-pool report results/<name>`.

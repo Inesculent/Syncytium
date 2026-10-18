@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Submit one sweep:  bash slurm/submit.sh CONFIG [sbatch options...]
-# Example:           bash slurm/submit.sh configs/sweep-4b.toml --exclude=evc33
+# Example:           bash slurm/submit.sh configs/sweep-4b.toml --exclude=evc26
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

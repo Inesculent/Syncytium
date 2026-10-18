@@ -11,9 +11,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 from itertools import product
 
+from torch import Tensor
+
 from syncytium.models import NamedTransform
 from syncytium.pool.config import PoolGridConfig
-from syncytium.quant import Estimator, Scheme, simulate_rebuild
+from syncytium.quant import ChannelScales, Estimator, Scheme, simulate_rebuild
 
 State = tuple[frozenset[int], ...]
 
@@ -84,16 +86,29 @@ class PoolCondition:
             (alive, self.estimator if 1 < len(alive) < n else None) for alive in self.alive
         )
 
-    def transform(self, stages: Mapping[str, int]) -> NamedTransform | None:
+    def transform(
+        self, stages: Mapping[str, int], scales: ChannelScales | None = None
+    ) -> NamedTransform | None:
         """Weight transform for this state; ``None`` means the original weights.
 
         Args:
             stages: Stage of each weight, from :func:`~syncytium.pool.layout.assign_stages`.
+            scales: Channel scales from calibration; required when the scheme scales.
+
+        Raises:
+            ValueError: If the scheme scales but no ``scales`` are given.
         """
         scheme, alive, estimator = self.scheme, self.alive, self.estimator
         if scheme is None:
             return None
-        return lambda name, weight: simulate_rebuild(weight, scheme, alive[stages[name]], estimator)
+        if scheme.scaling and scales is None:
+            raise ValueError(f"{self.id} scales its channels but no calibration was given")
+
+        def transform(name: str, weight: Tensor) -> Tensor:
+            channel = scales(name, weight, scheme) if scheme.scaling else None
+            return simulate_rebuild(weight, scheme, alive[stages[name]], estimator, channel)
+
+        return transform
 
 
 def plan(grid: PoolGridConfig) -> list[PoolCondition]:

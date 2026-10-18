@@ -1,0 +1,23 @@
+# Every survivor count for N = 4 at 4B, scaled and unscaled: each child, every partial rebuild
+# missing one or two children, the full rebuild and round-to-nearest baselines. Extends
+# subsets-0.8b to a size where 3-bit children are usable, so the two-of-four rebuilds and the
+# opposite-versus-adjacent pairs that set the placement rule are measured where they matter.
+name = "subsets-4b"
+output = "results/subsets-4b"
+
+[model]
+path = "Qwen/Qwen3.5-4B-Base"
+
+[eval]
+window = 2048
+
+[grid]
+bits = [2, 3, 4]
+group_sizes = [64]
+children = [4]
+phases = [0.5]
+rotation = [false, true]
+scaling = [false, true]
+seed = 0
+max_missing = 2
+rtn_bits = [2, 3, 4, 5, 6, 7, 8]

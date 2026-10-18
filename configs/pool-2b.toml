@@ -1,0 +1,26 @@
+# Pooled pipeline (stage 1.7) at 2B with the setting phase 2 would pool: 3-bit children with
+# rotation and channel scaling, where combining matters most and the scaled children pass H2
+# (1.30x bf16 in scaling-2b). The embedding stage plus 4 blocks of 6 decoder layers, each
+# stage held by 4 devices (20 devices). Same loss patterns as pool-0.8b.
+name = "pool-2b"
+output = "results/pool-2b"
+
+[model]
+path = "Qwen/Qwen3.5-2B-Base"
+
+[eval]
+window = 2048
+
+[pool]
+bits = 3
+group_size = 64
+children = 4
+stages = 4
+phase = 0.5
+rotation = true
+scaling = true
+seed = 0
+estimators = ["mean", "midpoint"]
+max_lost = 6
+samples = 8
+pattern_seed = 0

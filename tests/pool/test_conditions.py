@@ -1,6 +1,7 @@
 from collections import Counter
 from dataclasses import replace
 
+import pytest
 import torch
 
 from syncytium.pool import Kind, PoolCondition, plan, random_patterns
@@ -69,3 +70,20 @@ def test_transform_rebuilds_each_stage_from_its_own_children(grid):
     assert torch.equal(transform("c", weight), expected)
     assert condition.lost == [(1, 0), (1, 2), (2, 1)]
     assert condition.id == "random/mean/lost-1.0+1.2+2.1"
+
+
+def test_scaled_transform_applies_the_channel_scales(grid):
+    scheme = replace(grid.scheme, scaling=True)
+    condition = PoolCondition(Kind.DEVICE, scheme, (frozenset({0, 2}),), Estimator.MEAN)
+    weight = torch.randn(4, 64, generator=torch.Generator().manual_seed(0))
+    channel = torch.linspace(0.5, 2.0, 64)
+    transform = condition.transform({"a": 0}, lambda name, w, s: channel)
+    expected = simulate_rebuild(weight, scheme, {0, 2}, Estimator.MEAN, channel)
+    assert torch.equal(transform("a", weight), expected)
+    assert not torch.equal(expected, simulate_rebuild(weight, scheme, {0, 2}, Estimator.MEAN))
+
+
+def test_scaled_transform_needs_calibration(grid):
+    scheme = replace(grid.scheme, scaling=True)
+    with pytest.raises(ValueError, match="calibration"):
+        PoolCondition(Kind.FULL, scheme, (frozenset({0, 1, 2}),)).transform({"a": 0})

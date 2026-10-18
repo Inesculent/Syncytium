@@ -47,6 +47,11 @@ def test_rotation_uses_the_seed():
     assert grid.scheme.rotation_seed == 3
 
 
+def test_scaling_reaches_the_scheme():
+    grid = PoolGridConfig(bits=4, group_size=64, children=4, stages=4, scaling=True)
+    assert grid.scheme.scaling
+
+
 def test_rejects_unknown_keys(tmp_path):
     with pytest.raises(TypeError):
         load_pool_config(write(tmp_path, MINIMAL + "typo = 1\n"))
