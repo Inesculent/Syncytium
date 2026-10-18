@@ -286,6 +286,12 @@ correct the description of the storage cost and of which losses each scheme surv
 - *"Full health" includes the regrowth data.* The regrowth files of lost members are rebuilt
   too, and must match their recorded hashes.
 
+**2026-10-18, estimator rule applied.** In `pool-2b`, with one device lost and averaged over
+the 20 devices, the mean estimator gives 10.2413 and the midpoint 10.2366: the midpoint is
+better by 0.0047, below the 0.05 that would switch Gate A to it. Fused groups smaller than
+four therefore use the **mean**, as `swarm-9b` and `swarm-4b` already specify. (At 0.8B the
+difference is 0.0027.)
+
 **2026-10-18, H9 model, fixed before any agreement was measured.** H9 left the collective
 algorithms and the acceptance measurement open. A rough estimate made while choosing them put
 fused decoding without speculation near the 25% bar, so the choices below are the standard

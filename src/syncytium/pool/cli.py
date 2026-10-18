@@ -27,3 +27,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         run_pool(load_pool_config(args.config), args.config)
     else:
         write_pool_report(args.results, args.out or Path("docs/results") / args.results.name)
+
+
+if __name__ == "__main__":
+    main()
