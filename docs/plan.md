@@ -31,7 +31,7 @@ containers are follow-up work.
 | 2.S3 Speed model | Rounds traced from the architecture, drafting agreement measured on the cluster, tokens per second under a stated network model (H9). Done. | `src/syncytium/speed/`, `configs/speed-*.toml` |
 | 2.S4 Swarm console | `syncytium-swarm`: real child shards as agents in one process; ask, solo, fuse, kill and regrow. Done. | `src/syncytium/swarm/` |
 | 2.S5 Escalation on disagreement | Confirm H8b and H10b on GSM8K train problems at 9B and 4B, with a 6-bit round-to-nearest model as the static splits' large model. Done: H8b holds and H10b fails at both sizes. | `configs/confirm-*.toml`, `src/syncytium/tasks/disagreement.py`, `src/syncytium/speed/elasticity.py` |
-| 2.S6 Survival | H12b ([survival pre-registration](preregistration-survival.md)): expected per-request accuracy under device loss, against two cross-routed 6-bit pipelines, no backup, judged at 10–30% failure. Code done; needs the 6-bit model's GSM8K accuracy (`rtn_bits = [6]` in the swarm configs). | `src/syncytium/speed/survival.py` |
+| 2.S6 Survival | H12b ([survival pre-registration](preregistration-survival.md)): expected per-request accuracy under device loss, against two cross-routed 6-bit pipelines, no backup, judged at 10–30% failure. Done: H12b holds at 9B and 4B. | `src/syncytium/speed/survival.py` |
 | 2.S7 Remaining | H16 (fusion partners, *N* = 16), the regrowth negative control's perplexity. | — |
 
 ## Deferred: container demo
@@ -52,7 +52,8 @@ follow-up systems work.
 ## Phase 3: Cluster
 
 - **27B and H17.** Whether 2-bit children become usable at 27B. No 27B Base exists, so H17
-  runs on the post-trained series 0.8B–27B (`configs/post-*.toml`); queued.
+  ran on the post-trained series 0.8B–27B (`configs/post-*.toml`). Done: H17 fails (the worst
+  2-bit child is 2.02x bf16 at 27B; 3-bit children are 1.11x).
 - **GPTQ** as a single-model reference baseline. AWQ-style scaling is covered by stage 1.9.
 - **Instruction-tuned agents.**
 
@@ -80,9 +81,9 @@ study for MoE models is a candidate follow-up.
   install picks up new code but not new commands. `slurm/sweep.sbatch` now starts task and
   speed runs as modules (`python -m …`), which needs no reinstall.
 - The swarm's case rests on survival. On a reliable network, a 6-bit model pipelined over
-  the same devices is several times faster than fusing at similar accuracy (H10b is
-  registered as expected to fail), so H12 (survival under churn) decides whether the
-  swarm has an advantage at all.
+  the same devices is several times faster than fusing at similar accuracy (H10b failed
+  at both sizes, as expected when registered), so H12b (survival under device loss) decides
+  whether the swarm has an advantage at all.
 
 ## Observations
 

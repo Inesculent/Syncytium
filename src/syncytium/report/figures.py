@@ -31,7 +31,10 @@ BASELINE_CHILDREN = 4
 
 def all_figures(results: pd.DataFrame) -> dict[str, Figure]:
     """Every figure for a results frame, keyed by file name (without extension)."""
-    figures = {"offsets": offsets_figure(results)}
+    figures = {}
+    # The offsets figure shows unscaled children only; a run of scaled settings has none.
+    if ((results["kind"] == "child") & (results["scaling"] == "off")).any():
+        figures["offsets"] = offsets_figure(results)
     baselines = has_baselines(results)
     for variant in _settings(results):
         suffix = _suffix(*variant)

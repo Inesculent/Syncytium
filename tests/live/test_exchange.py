@@ -1,0 +1,159 @@
+import threading
+
+import pytest
+import torch
+
+from syncytium.live.exchange import Exchange, mean_in_order
+from syncytium.live.wire import Endpoint, Link, Message, decode, encode
+
+TIMEOUT = 0.4
+ROUNDS = 6
+
+
+class CrashError(Exception):
+    """Raised inside a member's thread to stop it, as a crash would."""
+
+
+def value(member, r):
+    return torch.full((3,), float(10 * member + r), dtype=torch.bfloat16)
+
+
+def run(members, crash=None, exchange_type=Exchange):
+    """Run ``ROUNDS`` rounds on every member in its own thread; return each member's results.
+
+    ``crash`` maps a member to the round at whose start it dies without contributing.
+    """
+    crash = crash or {}
+    endpoints = {m: Endpoint(m, host="127.0.0.1") for m in members}
+    addresses = {m: ("127.0.0.1", e._server.getsockname()[1]) for m, e in endpoints.items()}
+    results = {m: {} for m in members}
+    exchanges = {}
+
+    def member(m):
+        exchange = exchange_type(endpoints[m], addresses, members, timeout=TIMEOUT)
+        exchanges[m] = exchange
+        try:
+            for r in range(1, ROUNDS + 1):
+                if crash.get(m) == r:
+                    raise CrashError
+                results[m][r] = exchange.average(value(m, r))
+        except CrashError:
+            endpoints[m].close()
+
+    threads = [threading.Thread(target=member, args=(m,)) for m in members]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+    for e in endpoints.values():
+        e.close()
+    return results, exchanges
+
+
+def assert_consistent(results, survivors):
+    for r in range(1, ROUNDS + 1):
+        values = [results[m][r] for m in survivors]
+        assert all(torch.equal(v, values[0]) for v in values), f"members disagree in round {r}"
+
+
+def test_members_get_the_ordered_mean_every_round():
+    results, _ = run([0, 1, 2, 3])
+    assert_consistent(results, [0, 1, 2, 3])
+    for r in range(1, ROUNDS + 1):
+        expected = mean_in_order({m: value(m, r) for m in range(4)})
+        assert torch.equal(results[2][r], expected)
+
+
+def test_a_member_that_dies_is_dropped_and_the_rest_continue():
+    results, exchanges = run([0, 1, 2, 3], crash={2: 3})
+    assert_consistent(results, [0, 1, 3])
+    assert torch.equal(results[0][2], mean_in_order({m: value(m, 2) for m in range(4)}))
+    assert torch.equal(results[0][3], mean_in_order({m: value(m, 3) for m in (0, 1, 3)}))
+    assert exchanges[0].members == [0, 1, 3]
+    assert any(
+        e["event"] == "dropped" and e["member"] == 2 and e["round"] == 3
+        for e in exchanges[0].events
+    )
+
+
+def test_a_dead_leader_is_replaced():
+    results, exchanges = run([0, 1, 2, 3], crash={0: 3})
+    assert_consistent(results, [1, 2, 3])
+    assert torch.equal(results[1][3], mean_in_order({m: value(m, 3) for m in (1, 2, 3)}))
+    assert exchanges[1].members == [1, 2, 3]
+    assert any(e["event"] == "leader" for e in exchanges[1].events)
+
+
+class LeaderDiesMidBroadcast(Exchange):
+    """A leader that sends round 3's result to member 1 only, then crashes."""
+
+    def _broadcast(self, r, result, targets):
+        if self.me == 0 and r == 3:
+            message = Message("result", self.me, r, {"members": self.members}, result)
+            self.endpoint.send(1, self.addresses[1], message)
+            raise CrashError
+        super()._broadcast(r, result, targets)
+
+
+def test_a_leader_dying_mid_broadcast_leaves_every_member_with_the_same_result():
+    results, _ = run([0, 1, 2, 3], exchange_type=LeaderDiesMidBroadcast)
+    assert_consistent(results, [1, 2, 3])
+    # Member 1 already had round 3's result, which included the old leader; everyone adopts it.
+    assert torch.equal(results[2][3], mean_in_order({m: value(m, 3) for m in range(4)}))
+    assert torch.equal(results[2][4], mean_in_order({m: value(m, 4) for m in (1, 2, 3)}))
+
+
+@pytest.mark.parametrize(
+    "tensor",
+    [torch.arange(6, dtype=torch.bfloat16).reshape(2, 3), torch.zeros(0), torch.tensor([3.5])],
+)
+def test_messages_round_trip(tensor):
+    message = Message("contrib", 2, 7, {"members": [0, 2]}, tensor)
+    data = encode(message)
+    header_length = int.from_bytes(data[:4], "big")
+    payload_length = int.from_bytes(data[4:12], "big")
+    back = decode(data[12 : 12 + header_length], data[12 + header_length :])
+    assert (back.kind, back.sender, back.round, back.info) == ("contrib", 2, 7, {"members": [0, 2]})
+    assert back.tensor.dtype == tensor.dtype
+    assert torch.equal(back.tensor, tensor)
+    assert payload_length == tensor.numel() * tensor.element_size()
+
+
+def test_an_emulated_link_serializes_each_end_and_adds_latency_once():
+    link = Link(latency=0.0002, bandwidth=1e9)
+    assert link.serialize(125_000) == pytest.approx(0.001)
+    assert Link().serialize(10**9) == 0.0
+
+
+def test_rounds_on_an_emulated_link_cost_what_the_model_says():
+    import time
+
+    from syncytium.speed.network import Network, leader_reduce_seconds
+
+    link = Link(latency=0.002, bandwidth=1e8)
+    values = 50_000  # 100 kB of bf16 per vector, 8 ms on this link
+    members = [0, 1, 2, 3]
+    rounds = 6
+    endpoints = {m: Endpoint(m, host="127.0.0.1", link=link) for m in members}
+    addresses = {m: ("127.0.0.1", e._server.getsockname()[1]) for m, e in endpoints.items()}
+    elapsed = {}
+
+    def member(m):
+        exchange = Exchange(endpoints[m], addresses, members, timeout=5)
+        exchange.average(torch.zeros(values, dtype=torch.bfloat16))  # warm up the connections
+        # Steady-state rounds, as check (g) measures them: a single round would also count
+        # the skew between members left over from the previous one.
+        start = time.monotonic()
+        for _ in range(rounds):
+            exchange.average(torch.full((values,), float(m), dtype=torch.bfloat16))
+        elapsed[m] = (time.monotonic() - start) / rounds
+
+    threads = [threading.Thread(target=member, args=(m,)) for m in members]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+    for e in endpoints.values():
+        e.close()
+    predicted = leader_reduce_seconds(values, 4, Network(0.002, 1e8, 1e11))
+    assert predicted / 2 < max(elapsed.values()) < predicted * 2

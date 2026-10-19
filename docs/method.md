@@ -116,9 +116,13 @@ unscaled weight on this objective. The scales do not depend on *N* or φ, so eve
 children at one bit width shares them, and scaled round-to-nearest models serve as an
 AWQ-style single-model baseline.
 
-Stored as fp16, the scales add under 0.006 bits per weight over a whole model (at most 1 bit
-per weight for the smallest layer), so they are not counted in the memory figures. Shards
-cannot store them yet; `syncytium-shard` refuses scaled schemes.
+The scales are one vector per weight, shared by every child. In fp16 they would add under
+0.006 bits per weight over a whole model (at most 1 bit per weight for the smallest layer),
+and the memory figures leave them out. A scaled shard set stores them in fp32, so readers
+divide by exactly the simulated scales, which doubles that to under 0.012 bits per weight. They
+are stored once, in `scales.safetensors` next to the shards; the manifest records its SHA-256, and the parent
+hash covers the scales after each tensor's codes (`syncytium-shard --scaling` calibrates them
+as the sweeps do).
 
 ## Memory accounting
 
@@ -225,8 +229,9 @@ unsure.
 - *Disagreement.* Two lone agents answer the same problem, and the group answers only when
   their final answers differ. This needs agents that differ: identical replicas decoding
   greedily always agree. Staggered children differ by construction, so the signal is a
-  property of the swarm. It is under confirmation
-  ([disagreement pre-registration](preregistration-disagreement.md)).
+  property of the swarm. Confirmed on fresh problems at 4B and 9B (H8b; see the
+  [disagreement pre-registration](preregistration-disagreement.md) and the
+  [swarm report](results/swarm-report.md#escalation-on-disagreement-confirmed-h8b-but-not-efficient-h10b)).
 
 ## Regrowing a lost child
 

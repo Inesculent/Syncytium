@@ -13,9 +13,9 @@ why it matters.
 - **Cheaper fusion.** Fusing costs about six times the device time of a pipeline at similar
   accuracy. Averaging only some layers, exchanging fewer logits, or fusing two members
   instead of all could narrow that gap.
-- **Routing beyond disagreement.** If disagreement is confirmed, how many agents should
-  answer before deciding, and whether partial fusion (two or three members) is enough for
-  most escalations.
+- **Routing beyond disagreement.** Disagreement is confirmed (H8b). Open: how many agents
+  should answer before deciding, and whether partial fusion (two or three members) is enough
+  for most escalations.
 - **Large swarms.** Which members to fuse when only some are reachable (H16), how the
   coded residue scales to hundreds of members, and placement across failure domains.
 - **Channel scales in shards.** Scaled children are the best ones, but shard files cannot

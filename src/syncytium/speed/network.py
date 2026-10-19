@@ -78,6 +78,17 @@ def argmax_seconds(values: int, devices: int, network: Network) -> float:
     return min(all_reduce_seconds(values, devices, network), scatter + gather)
 
 
+def leader_reduce_seconds(values: int, devices: int, network: Network) -> float:
+    """Seconds for the leader reduce of the live system (H18).
+
+    Every member sends its vector to the leader, which returns the mean to each. The leader's
+    link receives (n - 1) vectors and sends (n - 1), one after another; each direction adds
+    one latency in flight.
+    """
+    bits = values * BYTES_PER_VALUE * 8
+    return 2 * network.latency + 2 * (devices - 1) * bits / network.bandwidth
+
+
 def fused_pass_seconds(swarm: Swarm, positions: int, network: Network) -> float:
     """Seconds for the fused group to run one forward pass over ``positions`` tokens."""
     talk = sum(

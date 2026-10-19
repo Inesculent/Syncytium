@@ -15,7 +15,9 @@ records the hash of every such file and the parent hash of the set it belongs to
 files and the manifest are left untouched, and nothing here is read for serving. A regrown
 shard is written exactly as :func:`~syncytium.shards.writer.write_children` wrote it, so it
 must match its SHA-256 in the manifest; a regrowth is refused before writing if the parent
-codes it implies do not match the parent hash.
+codes it implies do not match the parent hash. Regrowth works on codes alone: a scaled set's
+scales file is identical for every child, so it is only read (and checked against its hash)
+because the parent hash covers the scales, and never rewritten.
 """
 
 import hashlib
@@ -43,15 +45,16 @@ from syncytium.quant import (
 from syncytium.shards.erasure import ORDER, decode, encode
 from syncytium.shards.manifest import (
     MANIFEST_NAME,
+    SCALES_NAME,
     Manifest,
     ShardError,
     TensorSpec,
     file_sha256,
     shard_name,
-    update_codes_hash,
+    update_parent_hash,
 )
 from syncytium.shards.packing import pack, packed_size, unpack
-from syncytium.shards.reader import verify_shard
+from syncytium.shards.reader import read_scales, verify_shard
 
 REGROWTH_FORMAT = "syncytium-regrowth/1"
 # The shared grid is identical in every child, so a survivor's copy is the lost child's.
@@ -286,8 +289,9 @@ def regrow_shards(directory: Path, lost: Collection[int], kind: Redundancy) -> l
         Paths of the regrown shard files.
 
     Raises:
-        ShardError: If ``kind`` cannot regrow this loss pattern, a survivor's file or the
-            sidecar does not match, or the regrown data does not reproduce the hashes.
+        ShardError: If ``kind`` cannot regrow this loss pattern, a survivor's file, the
+            sidecar or a scaled set's scales file does not match, or the regrown data does
+            not reproduce the hashes.
     """
     manifest = Manifest.load(directory / MANIFEST_NAME)
     sidecar = _load_sidecar(directory, kind, manifest)
@@ -319,6 +323,7 @@ class _OpenSet:
     sidecar: RegrowthManifest
     shards: dict[int, Any]
     held: dict[int, Any]
+    scales: dict[str, Tensor]
 
     def codes(self, spec: TensorSpec) -> dict[int, Tensor]:
         return {k: _read_codes(spec, f, self.manifest) for k, f in self.shards.items()}
@@ -343,6 +348,7 @@ def _regrow_shard_tensors(
             sidecar,
             shards={k: _open(stack, directory / shard_name(k)) for k in survivors},
             held={k: _open(stack, directory / regrowth_name(sidecar.kind, k)) for k in survivors},
+            scales=read_scales(directory / SCALES_NAME, manifest),
         )
         for spec in manifest.tensors:
             for index, tensors in _regrow_tensor(spec, source, lost, digest).items():
@@ -362,7 +368,8 @@ def _regrow_tensor(
     codes = regrow_codes(
         available, source.regrowth(spec), lost, source.sidecar.kind, source.sidecar.tolerated
     )
-    update_codes_hash(digest, spec.name, parent_codes([*available.values(), *codes.values()]))
+    parent = parent_codes([*available.values(), *codes.values()])
+    update_parent_hash(digest, spec.name, parent, source.scales.get(spec.name))
     grid = {f"{spec.name}/{part}": source.first(f"{spec.name}/{part}") for part in GRID_PARTS}
     bits = source.manifest.scheme.bits
     return {index: {f"{spec.name}/codes": pack(c, bits), **grid} for index, c in codes.items()}

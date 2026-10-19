@@ -5,7 +5,11 @@ at 9B and 4B (H7, H8, H11, H13), the speed model (H9), exact regrowth (H14, H15)
 follow-up runs registered in phase 1 (pooled pipeline H6, rotation seeds, every survivor count
 at 4B, the demo's scheme), and the confirmation of the
 [disagreement pre-registration](../preregistration-disagreement.md) (H8b, H10b) on fresh
-problems.*
+problems, survival under device loss ([H12b](../preregistration-survival.md)), and the
+post-trained series 0.8B–27B (H17).*
+
+*For the whole project in one place, with conclusions and limitations, see the
+[research report](../report.md).*
 
 ## Summary
 
@@ -29,8 +33,14 @@ problems.*
 - **Fusion is survivable, not efficient.** Under the pre-registered network model, four fused
   devices reach 35% of one solo device's speed at 9B (H9 passes) but 23% at 4B (H9 fails). A
   fused token costs about six times the device time of a 6-bit model pipelined over the same
-  four devices. What the swarm offers that a pipeline does not is that any surviving member
-  keeps answering, and lost members come back exactly.
+  four devices.
+- **Under device loss, the swarm answers better than replicated pipelines (H12b holds).**
+  With no backup and each device lost with probability 10–30%, the swarm's expected accuracy
+  per request beats two cross-routed 6-bit pipelines at both sizes (9B at *p* = 0.3: 0.839
+  against 0.703). The pipelines are still five to seven times faster.
+- **2-bit children are not usable alone at 27B (H17 fails).** On the post-trained series, the
+  worst 2-bit child falls from 417x bf16 perplexity at 0.8B to 2.0x at 27B, short of the 1.5x
+  bar. Four of them still rebuild the 27B model within 0.23 of bf16.
 - **The phase 1 follow-ups hold, with one correction.** Both pooled pipelines pass H6.
   Survivor ordering and the placement rule hold at 4B in all twelve settings. But the
   phase 1 claim that a scaled, rotated child is within 0.05 of round-to-nearest fails at
@@ -239,6 +249,65 @@ A static split with the same router is at least as accurate and faster: escalate
 cost far less on a 6-bit pipeline than on four fused devices. The 6-bit model also matched
 bf16 on these problems, within 0.1 point at both sizes.
 
+## Survival under device loss: holds (H12b)
+
+Four devices, no backup, each lost with probability *p* during a window
+([pre-registration](../preregistration-survival.md); [9B](swarm-9b/survival.md),
+[4B](swarm-4b/survival.md)). The swarm answers with every live member fused. Two 6-bit
+pipelines, each stage held by two devices and cross-routed, answer when every stage has a live
+copy. Expected accuracy per request, with unanswered requests counted as wrong:
+
+| *p* | 9B swarm | 9B pipelines | 4B swarm | 4B pipelines |
+|---:|---:|---:|---:|---:|
+| 0.01 | 0.860 | 0.849 | 0.828 | 0.827 |
+| 0.05 | 0.858 | 0.845 | 0.826 | 0.823 |
+| **0.1** | **0.856** | **0.832** | **0.822** | **0.811** |
+| **0.2** | **0.850** | **0.783** | **0.813** | **0.762** |
+| **0.3** | **0.839** | **0.703** | **0.797** | **0.685** |
+
+**H12b holds at both sizes**: the swarm wins at every judged rate (bold).
+
+- **Why it wins.** The pipelines answer 98.0%, 92.2% and 82.8% of requests at *p* = 0.1, 0.2 and
+  0.3. The swarm answers 99.99%, 99.8% and 99.2%, and its fused survivors stay accurate.
+- **Not because of a weak 6-bit model.** The 6-bit model scored 84.9% on these problems at 9B,
+  below bf16 (86.2%). But it matched bf16 on the train problems and beats it on MMLU (72.1%
+  against 71.9%), so a 1.3-point difference is within the noise of 1,319 problems. Had the
+  6-bit model matched bf16, H12b would still pass (9B at *p* = 0.1: 0.856 against 0.845). The
+  swarm's lead below *p* = 0.1 rests on that noise and is not a finding.
+- **Throughput** (reported, not judged): at *p* = 0.1 the pipelines deliver 4.8x (9B) and 7.3x
+  (4B) as many correct answers per second per token.
+- **Restoring full health with no backup**, at *p* = 0.1:
+  - Neighbour bits restore every loss 96.4% of the time, *less* often than the replicated
+    pipelines (98.0%), because two adjacent losses defeat them.
+  - The coded residue restores 99.6% (*t* = 2, 1 bit per weight per child) and 99.99%
+    (*t* = 3).
+  - When neighbour bits cannot restore, the survivors still answer at 83.3% (9B) and 77.5% (4B).
+
+## Scale: the post-trained series (H17): fails
+
+Qwen3.5 has no 27B Base model, so H17 runs on the post-trained checkpoints at every size
+([0.8B](post-0.8b/summary.md), [2B](post-2b/summary.md), [4B](post-4b/summary.md),
+[9B](post-9b/summary.md), [27B](post-27b/summary.md)). Worst child as a multiple of the model's
+own bf16 WikiText-2 perplexity, scaled and rotated, *N* = 4:
+
+| | 0.8B | 2B | 4B | 9B | 27B |
+|---|---:|---:|---:|---:|---:|
+| 2-bit | 417x | 84x | 18x | 4.2x | **2.02x** ❌ |
+| 3-bit | 1.60x | 1.33x | 1.22x | 1.14x | 1.11x |
+| 4-bit | 1.11x | 1.08x | 1.05x | 1.05x | 1.04x |
+| Base, 2-bit (phase 1) | 391x | 46x | 12x | 3.7x | — |
+
+- **H17 fails.** The usable bit width does fall with size, but at 27B the worst 2-bit child is
+  2.02x bf16 (13.91 against 6.90), short of the 1.5x bar. The pre-registered follow-up, a
+  2-bit swarm on GSM8K at 27B, therefore does not run.
+- **The 2-bit fleet works at 27B.** Four 2-bit children (8.4 GB each) rebuild to 7.13, within
+  0.23 of bf16, and any three to at most 7.48.
+- **Post-training barely changes robustness.** At 3 bits the post-trained and Base series agree
+  within 0.03x at every size; at 2 bits the post-trained children are somewhat worse.
+- *Exploratory.* Between 9B and 27B, the 2-bit ratio's excess over 1 falls roughly in proportion
+  to size. Continuing that line would reach 1.5x near 50B. Two points do not make a trend, and
+  no larger dense Qwen3.5 model exists to test it.
+
 ## Exploratory results
 
 **MMLU.** The fusion gain carries over to knowledge questions, though smaller than on
@@ -276,18 +345,19 @@ answer for every problem.
    [disagreement pre-registration](../preregistration-disagreement.md#known-when-fixing)).
    Fusing is slow because every device reads a whole child for every token, and devices
    exchange megabytes per token.
-4. **So the claim is survival.** A pipeline stops when any stage is lost. A replica set gains
-   nothing from extra members. Erasure-coded shards cannot answer until decoded. The swarm
-   answers with any surviving member, gets better with every member present, and regrows the
-   lost ones. Quantifying that against the alternatives under churn (H12) is the comparison
-   the project now depends on.
+4. **The claim is survival, and it holds.** A pipeline stops when any stage is lost; the swarm
+   answers with any surviving member and regrows the lost ones. Against replicated 6-bit
+   pipelines with no backup, its expected accuracy per request is higher at every device
+   failure rate from 10% to 30%, at both sizes (H12b). The pipelines remain several times
+   faster. Neighbour bits alone restore full health less often than replication does; the
+   coded residue restores it more often.
 5. **The swarm can route itself.** Entropy fails as an escalation signal, but two members
    disagreeing finds nearly every problem worth fusing for, on fresh problems at both sizes.
    It works because staggered children differ; identical replicas would always agree.
 6. **What cannot be concluded yet:**
-   - H12b, survival under device loss (registered; needs the 6-bit model on the test problems);
    - H16, choosing fusion partners in larger swarms;
-   - H17, 27B;
+   - whether 2-bit swarms become usable above 27B;
+   - survival when failures are correlated rather than independent;
    - downstream tasks beyond GSM8K and MMLU;
    - instruction-tuned agents;
    - any measurement on real networks or devices.
@@ -306,11 +376,12 @@ answer for every problem.
 | H9 (fused speed) | Holds at 9B, fails at 4B | Above |
 | H10 (elasticity) | Dropped, as registered after H8 failed | — |
 | H11 (graceful degradation) | Holds at 9B and 4B | Above |
-| H12 (survival under churn) | Superseded by the confirmatory H12b; awaiting the 6-bit model's accuracy | [Survival pre-registration](../preregistration-survival.md) |
+| H12 (survival under churn) | Superseded by the confirmatory H12b | [Survival pre-registration](../preregistration-survival.md) |
+| H12b (survival against replicated pipelines) | Holds at 9B and 4B | Above |
 | H13 (loss mid-answer) | Holds at 9B and 4B | Above |
 | H14, H15 (exact regrowth, no drift) | Hold | Above |
 | H16 (fusion partners, *N* = 16) | Not run | — |
-| H17 (27B) | Post-trained series 0.8B–27B queued (no 27B Base exists) | [Swarm pre-registration](../preregistration-swarm.md#changes-after-fixing) |
+| H17 (27B, post-trained series) | Fails: worst 2-bit child 2.02x bf16 (bar 1.5x) | Above |
 | H8b (escalation on disagreement) | Holds at 9B and 4B, on fresh problems | Above |
 | H10b (elasticity with that router) | Fails at 9B and 4B, as expected when registered | Above |
 
@@ -325,6 +396,8 @@ answer for every problem.
 | Rotation seeds at 9B | [seed1-9b](seed1-9b/summary.md), [seed2-9b](seed2-9b/summary.md) |
 | Demo scheme at 2B | [demo-2b](demo-2b/summary.md) |
 | H8b and H10b | [confirm-9b](confirm-9b/summary.md), [confirm-4b](confirm-4b/summary.md) |
+| H12b | [swarm-9b survival](swarm-9b/survival.md), [swarm-4b survival](swarm-4b/survival.md) |
+| H17, post-trained series | [0.8B](post-0.8b/summary.md), [2B](post-2b/summary.md), [4B](post-4b/summary.md), [9B](post-9b/summary.md), [27B](post-27b/summary.md) |
 
 Raw outputs are in `results/<name>/`. Task runs also keep every answer in
 `results/<name>/items/<task>/<condition>.jsonl`, with the config, commit and package versions

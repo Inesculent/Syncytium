@@ -1,6 +1,7 @@
 """Command lines for shard files.
 
-``syncytium-shard MODEL --out DIR [scheme options]`` writes the children;
+``syncytium-shard MODEL --out DIR [scheme options] [--scaling]`` writes the children (with
+channel scales calibrated as the sweeps do, given ``--scaling``);
 ``syncytium-rebuild DIR [--children K ...] [--repeat R]`` times rebuilds from them;
 ``syncytium-regrow DIR --kind {neighbour,residue} [--tolerate T] [--lost K ...]`` writes
 regrowth data next to them, or regrows lost children from it.
@@ -10,10 +11,8 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
-import torch
-
-from syncytium.models import load_model, split_parameters
 from syncytium.quant import Scheme
+from syncytium.shards.calibration import shard_model
 from syncytium.shards.manifest import shard_name
 from syncytium.shards.regrow import (
     Redundancy,
@@ -22,7 +21,8 @@ from syncytium.shards.regrow import (
     write_regrowth,
 )
 from syncytium.shards.timing import log_timing, time_rebuild
-from syncytium.shards.writer import write_children
+
+SCALING_HELP = "scale input channels, calibrated on WikiText-2 train text as the sweeps do"
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -35,10 +35,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--children", type=int, default=4)
     parser.add_argument("--phase", type=float, default=0.0)
     parser.add_argument("--rotation-seed", type=int, default=None)
+    parser.add_argument("--scaling", action="store_true", help=SCALING_HELP)
+    parser.add_argument("--device", default="cpu", help="where to load and calibrate the model")
     args = parser.parse_args(argv)
-    scheme = Scheme(args.bits, args.group_size, args.children, args.phase, args.rotation_seed)
-    model = load_model(args.model, device="cpu", dtype=torch.bfloat16)
-    write_children(*split_parameters(model), scheme, args.model, args.out)
+    scheme = Scheme(
+        args.bits, args.group_size, args.children, args.phase, args.rotation_seed, args.scaling
+    )
+    shard_model(args.model, scheme, args.out, args.device)
     for index in range(scheme.num_children):
         size = (args.out / shard_name(index)).stat().st_size
         print(f"{shard_name(index)}  {size / 1e9:.3f} GB")

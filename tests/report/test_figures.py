@@ -21,6 +21,14 @@ def test_one_figure_set_per_phase_and_rotation(results):
     assert "offsets" in names
 
 
+def test_a_run_of_scaled_settings_has_no_offsets_figure(results):
+    scaled = results.copy()
+    scaled.loc[scaled["kind"] != "bf16", "scaling"] = "on"
+    names = set(all_figures(scaled))
+    assert "offsets" not in names
+    assert any(name.startswith("recovery-") for name in names)
+
+
 def test_recovery_has_one_panel_per_bit_width(results):
     figure = all_figures(results)["recovery-p0-rot-off"]
     assert [axis.get_title() for axis in figure.axes] == ["3-bit children", "4-bit children"]

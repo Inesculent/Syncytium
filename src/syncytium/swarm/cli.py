@@ -1,6 +1,7 @@
 """Command line: ``syncytium-swarm create MODEL DIR`` and ``syncytium-swarm console DIR``.
 
-``create`` splits a model into staggered children with regrowth data. ``console`` opens an
+``create`` splits a model into staggered children with regrowth data (with ``--scaling``, also
+channel scales calibrated as the sweeps do). ``console`` opens an
 interactive session over them (type ``help``); commands can also be piped in, one per line.
 """
 
@@ -10,11 +11,10 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-import torch
-
-from syncytium.models import load_model, split_parameters
 from syncytium.quant import Scheme
-from syncytium.shards import Redundancy, ShardError, write_children, write_regrowth
+from syncytium.shards import Redundancy, ShardError, write_regrowth
+from syncytium.shards.calibration import shard_model
+from syncytium.shards.cli import SCALING_HELP
 from syncytium.swarm.session import Exchange, Format, Reply, Swarm
 
 # Until H8 calibrates it, a round number: escalate when the agent's mean entropy exceeds it.
@@ -33,6 +33,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     create.add_argument("--children", type=int, default=4)
     create.add_argument("--phase", type=float, default=0.5)
     create.add_argument("--rotation-seed", type=int, default=0, help="-1 for no rotation")
+    create.add_argument("--scaling", action="store_true", help=SCALING_HELP)
+    create.add_argument("--device", default="cpu", help="where to load and calibrate the model")
     create.add_argument(
         "--redundancy", type=Redundancy, choices=list(Redundancy), default=Redundancy.NEIGHBOUR
     )
@@ -52,9 +54,8 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 def _create(args: argparse.Namespace) -> None:
     seed = None if args.rotation_seed < 0 else args.rotation_seed
-    scheme = Scheme(args.bits, args.group_size, args.children, args.phase, seed)
-    model = load_model(args.model, device="cpu", dtype=torch.bfloat16)
-    write_children(*split_parameters(model), scheme, args.model, args.directory)
+    scheme = Scheme(args.bits, args.group_size, args.children, args.phase, seed, args.scaling)
+    shard_model(args.model, scheme, args.directory, args.device)
     write_regrowth(args.directory, args.redundancy, args.tolerate)
     print(f"{scheme.num_children} members in {args.directory}, regrowth: {args.redundancy}")
 

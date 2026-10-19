@@ -46,7 +46,7 @@ Current:
 
 ```
 configs/                sweep, pooled-pipeline, task and speed configs (TOML)
-docs/                   hypothesis, pre-registrations, method, plan, cluster guide, future work
+docs/                   research report, hypothesis, pre-registrations, method, plan, cluster guide, future work
 docs/results/           reports, summary tables and figures written by the report commands
 slurm/                  cluster setup, job script and submission helper
 src/syncytium/quant/    staggered quantization, rebuild, partial rebuild, regrowth, simulation

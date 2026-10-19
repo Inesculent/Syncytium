@@ -7,6 +7,9 @@ across model sizes, the demo's scheme at 2B and the pooled pipeline at 0.8B and 
 phase 1 the project was reframed as a swarm of agents; its results are in the
 [swarm report](swarm-report.md), and the "Implications for phase 2" below predate it.*
 
+*For the whole project in one place, with conclusions and limitations, see the
+[research report](../report.md).*
+
 ## Summary
 
 - **The scheme works as designed, and it gets better as the model grows.** At 4B and 9B,

@@ -3,12 +3,13 @@
 **Survive Anything:** a swarm of low-bit LLM agents that each run on their own, fuse into
 their full-precision parent when a task needs it, and regrow any member that is lost.
 
-> **Status: pre-alpha research, studied in simulation.** Phase 1 (perplexity sweeps at 0.8B,
-> 2B, 4B and 9B) is in the [phase 1 report](docs/results/phase-1-report.md). The swarm's
-> pre-registered tests at 4B and 9B are in the [swarm report](docs/results/swarm-report.md):
-> fusion matches the parent on GSM8K, the swarm survives losing members, and lost members are
-> regrown exactly, and two agents disagreeing tells the swarm when to fuse. See the
-> [roadmap](#roadmap).
+> **Status: pre-alpha research, studied in simulation.** Start with the
+> [research report](docs/report.md): what was done, why, what came of it and what it means, in
+> one place. In short, fusion matches the parent on GSM8K at 4B and 9B, the swarm survives
+> losing members, lost members are regrown exactly, and two agents disagreeing tells the
+> swarm when to fuse. Fusing is slower than a pipeline, but under 10–30% device loss with no
+> backup the swarm answers more accurately than replicated pipelines (H12b). 2-bit children
+> are still not usable alone at 27B (H17). See the [roadmap](#roadmap).
 
 ## The idea
 
@@ -43,6 +44,8 @@ better with every member present, and heals.
 
 ## Documents
 
+- [Research report](docs/report.md): the whole project in one place, with conclusions,
+  limitations and the status of every hypothesis.
 - [Swarm report](docs/results/swarm-report.md): fusion, survival and regrowth at 4B and 9B,
   with every pre-registered outcome.
 - [Phase 1 report](docs/results/phase-1-report.md): the perplexity sweeps behind the scheme.
@@ -65,9 +68,11 @@ better with every member present, and heals.
    - Done: task accuracy of lone and fused agents, members lost mid-answer, the speed of
      fused agents under a network model, and exact regrowth.
    - Done: escalation on two agents' disagreement, confirmed on fresh problems.
-   - Next: survival under device loss against replicated pipelines (H12b), and choosing
-     fusion partners in larger swarms.
-3. **Scale and systems.** Qwen3.5 27B, real networks and devices, instruction-tuned agents.
+   - Done: survival under device loss against replicated pipelines (H12b holds).
+   - Next: correlated failures, and choosing fusion partners in larger swarms (H16).
+3. **Scale and systems.** Done: the post-trained series up to 27B (H17 fails: 2-bit children
+   are not usable alone at 27B). Next: a 3-bit swarm at 27B, real networks and devices,
+   instruction-tuned agents.
 
 ## Requirements
 
