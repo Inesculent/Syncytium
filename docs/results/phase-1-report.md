@@ -1,9 +1,11 @@
 # Phase 1 Report: Staggered Children at 0.8B, 2B, 4B and 9B
 
 *Draft, 2026-10-18. Covers the 0.8B pilot, the 2B, 4B and 9B sweeps, every survivor count for
-N = 4 at 0.8B (`subsets-0.8b`), activation-aware channel scaling at every size (stage 1.9),
-the same-node baselines, the equal-memory comparison across model sizes and the
-pooled-pipeline screen. The full pooled-pipeline run has not produced results yet.*
+N = 4 at 0.8B and 4B (`subsets-0.8b`, `subsets-4b`), activation-aware channel scaling at every
+size (stage 1.9), rotation seeds at 9B, the same-node baselines, the equal-memory comparison
+across model sizes, the demo's scheme at 2B and the pooled pipeline at 0.8B and 2B. After
+phase 1 the project was reframed as a swarm of agents; its results are in the
+[swarm report](swarm-report.md), and the "Implications for phase 2" below predate it.*
 
 ## Summary
 
@@ -16,13 +18,15 @@ pooled-pipeline screen. The full pooled-pipeline run has not produced results ye
   keeps the rebuild exact and improves every child, rebuild and single model. With it, the
   worst 3-bit child of the 9B model drops from 1.33x to 1.13x bf16, and four 2-bit children
   rebuild the 4B and 9B models within H3's 0.5 bar (0.44 and 0.27).
-- **With scaling and rotation, the last node standing pays almost nothing.** Against the
-  scaled, rotated RTN model of the same size, the worst staggered child is behind by at most
-  0.05 at 3 and 4 bits at 4B and 9B (9B 4-bit: 7.159 against 7.157). Without scaling it was
-  behind by up to 0.49 at 3 bits; with scaling but no rotation, by about 0.2.
-- **Quality degrades strictly with each lost child.** At 0.8B with four children, the worst
-  rebuild from any *k* + 1 children beats the best from any *k*, for every *k* and every
-  setting. Which children survive also matters: two children with opposite offsets rebuild
+- **With scaling and rotation, the last node standing pays little.** Against the scaled,
+  rotated RTN model of the same size, the worst staggered child at 9B is behind by at most
+  0.014 at 4 bits across three rotation seeds (7.159 against 7.157 with seed 0), and by
+  0.05–0.09 at 3 bits. Without scaling it was behind by up to 0.49 at 3 bits; with scaling
+  but no rotation, by about 0.2. *(Corrected after the seed runs: the draft claimed at most
+  0.05 at 3 bits as well, which held only for seed 0.)*
+- **Quality degrades strictly with each lost child.** At 0.8B and 4B with four children, the
+  worst rebuild from any *k* + 1 children beats the best from any *k*, for every *k* and
+  every setting. Which children survive also matters: two children with opposite offsets rebuild
   far better than two adjacent ones.
 - **A fleet of small nodes beats any single model that fits on one of them.** At the memory
   of one child, any three of four scaled children rebuild a better model than the best
@@ -158,17 +162,36 @@ This is what the partial-rebuild bound predicts: the error is half the largest g
 the surviving offsets, Δ/4 for an opposite pair against 3Δ/8 for an adjacent one. An
 opposite pair is about as good as a full *N* = 2 set (3-bit: 14.86).
 
-### H5: survival in a running system: not yet tested
+**At 4B** (`subsets-4b`, φ = ½, with and without rotation and scaling, every survivor count),
+both pre-registered criteria hold in all twelve settings: any *k* + 1 children beat any *k*,
+and every opposite pair beats every adjacent pair. 3-bit, rotated and scaled: one child
+9.62–9.67, two 8.39–8.68 (opposite 8.39–8.40, adjacent 8.63–8.68), three 8.25–8.27, all four
+8.14. The placement rule below therefore holds where 3-bit children are usable, not only at
+0.8B.
 
-This is phase 2. The pieces it depends on that phase 1 can vouch for are the exact rebuild
-(H1) and the quality of every fallback state (H2–H4).
+### H5: survival in a running system: superseded
 
-### H6: pooled pipeline: pipeline check only
+The reframed project has no main container to wipe and rebuild. H5 is replaced by H13–H15 of
+the [swarm pre-registration](../preregistration-swarm.md): a fused group surviving a member's
+loss mid-answer, and exact regrowth of lost members (see the [swarm report](swarm-report.md)).
 
-The `pool-screen-0.8b` run (2 stages, 4 devices each, 8 windows) exercised the code end to
-end. On its slice, losing any one device stays within 0.10 of bf16, and the log-perplexity of
-multi-device losses is predicted by summing per-stage effects with R² ≈ 1.0. With 8 windows
-and 4 random patterns this is not evidence for H6; the full `pool-0.8b` run is pending.
+### H6: pooled pipeline: holds at 0.8B and 2B
+
+Five stages of four devices each, every single-device loss, every stage on one child and 40
+random loss patterns of 2–6 devices ([pool-0.8b](pool-0.8b/summary.md),
+[pool-2b](pool-2b/summary.md)):
+
+| | 0.8B, 4-bit, rotated | 2B, 3-bit, rotated and scaled |
+|---|---:|---:|
+| bf16 / full pool | 13.125 / 13.197 | 10.052 / 10.195 |
+| H6b: worst single device lost, gap to bf16 (bar 0.5) | 0.124 ✅ | 0.222 ✅ |
+| H6c: R² of the stage-wise prediction, mean estimator (bar 0.9) | 1.000 ✅ | 0.999 ✅ |
+| Measured / predicted log-perplexity increase | 1.005 | 1.003 |
+
+The cost of any loss pattern is the sum of each stage's own cost, almost exactly, under
+both estimators. The midpoint estimator beats the mean by only 0.003 (0.8B) and 0.005 (2B)
+with one device lost. (The earlier `pool-screen-0.8b` check had 3 stages, not 2 as first
+written.)
 
 ## Channel scaling (stage 1.9)
 
@@ -207,6 +230,12 @@ against 8.88–9.27 unscaled), and the worst one is almost as good as the scaled
 At 2B the scaled gap is still 0.39 (3-bit) and 0.06 (4-bit), and at 0.8B 1.0 and 0.09.
 Rotation matters here: scaled but unrotated 3-bit children trail the scaled, unrotated RTN
 model by about 0.21 at both 4B and 9B, and their spread is 0.2 rather than 0.05.
+
+**Across rotation seeds** (`seed1-9b`, `seed2-9b`), the 9B 4-bit gap stays at most 0.014,
+but the 3-bit gap is 0.048, 0.055 and 0.093 for seeds 0, 1 and 2. The pre-registered
+criterion (within 0.05 for every seed at 3 and 4 bits) therefore fails at 3 bits. Scaled
+rebuilds move by at most 0.006 across seeds, single children by about 0.02 and RTN models by
+about 0.03, so differences between single 9B models below about 0.03 cannot be ranked.
 
 **The answer to "why not a better quantizer?"** is that the two are complementary: scaling
 improves the quantizer, and staggering then turns *N* copies of it into functional shards of
@@ -280,9 +309,10 @@ but the single surviving node falls behind the best fit by 0.11–0.29 (4-bit, 2
    memory than bf16, and together they reconstruct the parent nearly losslessly. The two
    properties that replication and erasure coding trade off are both present.
 2. **The scheme composes with better quantizers.** Channel scaling improves children,
-   rebuilds and single models together, and with it and rotation a staggered child is
-   within 0.05 of the same-size single model at 4B and 9B. The scheme's one weakness, the last node standing,
-   is now small where it matters.
+   rebuilds and single models together. With it and rotation, a staggered 4-bit child at 9B
+   is within 0.014 of the same-size single model across rotation seeds, and a 3-bit child
+   within 0.05–0.09. The scheme's one weakness, the last node standing, is small where it
+   matters.
 3. **Bit width is the main design dial, and it sets the trade-off between solo and fleet.**
    At 4 bits, a child alone is nearly as good as the parent, so combining adds little (9B
    scaled: 7.16 → 6.99). At 3 bits, combining recovers most of the gap (7.90 → 7.03). At
@@ -299,11 +329,10 @@ but the single surviving node falls behind the best fit by 0.11–0.29 (4-bit, 2
 6. **Phase and rotation are second-order at 4 bits; scaling is not.** φ = ½ and rotation
    change 4-bit perplexity by hundredths at 4B and 9B. Scaling moves the worst 4-bit child
    by 0.1–0.2 and the worst 3-bit child by 1.0–1.4 at the same sizes.
-7. **What cannot be concluded yet.** Losses of two or more children at sizes above 0.8B,
-   scaling at *N* ≠ 4 or φ = 0, other group sizes, downstream task accuracy, variance across
-   rotation seeds (one seed per setting), comparison with GPTQ-style children, or speed.
-   Measurement noise is below 0.005, but differences below about 0.05 at 4 bits could still
-   change with another rotation seed and should not be ranked.
+7. **What cannot be concluded yet.** Scaling at *N* ≠ 4 or φ = 0, other group sizes,
+   comparison with GPTQ-style children, or speed on real hardware. Measurement noise is
+   below 0.005; rotation seeds move single 9B models by up to about 0.03. Task accuracy and a
+   speed model are in the [swarm report](swarm-report.md).
 
 ## Why it matters
 
@@ -320,15 +349,21 @@ results show a third option that gets most of both, without any training:
 - **Capacity from many small devices.** A set of devices that each hold a few gigabytes can
   jointly run a model better than any one of them could hold: four 2.8 GB nodes rebuild a
   9B model to 7.25, where the best model that fits on one of them scores 8.34.
-- **Almost no cost.** With scaling and rotation, the scheme gives up at most 0.05 against
-  the same-size single model even when only one node is left (4B and 9B), and adds no
-  memory.
+- **Little cost.** With scaling and rotation, the scheme gives up at most 0.014 (4-bit) or
+  0.05–0.09 (3-bit) against the same-size single model at 9B even when only one node is
+  left, and adds no memory.
 
 The scaling direction also matters: the scheme gets more useful as models grow (3-bit
 children become usable between 2B and 4B, or at 2B with channel scaling), which is where
 protecting and distributing a model is most expensive.
 
 ## Implications for phase 2: the orchestrated system
+
+*Written before the reframe and kept as written. Phase 2 became a swarm of agents studied in
+simulation (see the [swarm pre-registration](../preregistration-swarm.md) and
+[swarm report](swarm-report.md)); the container demo below is deferred to follow-up systems
+work. Points 3 and 6 were since confirmed: the placement rule at 4B, and stage-wise
+additivity (H6c) at 0.8B and 2B.*
 
 Phase 2 puts the scheme under an orchestration layer: a deterministic control plane (health,
 leader election, rebuild, revoke; stage 2.3), containers (2.4), a router that chooses which
@@ -459,13 +494,13 @@ model answers.
 
 | Gap | Effect | Remedy | Command |
 |-----|--------|--------|---------|
-| Pooled pipeline only screened | H6 untested | Confirm the H6 thresholds, then run the pre-registered 0.8B pool and a 3-bit scaled 2B pool | `configs/pool-0.8b.toml`, `configs/pool-2b.toml` |
-| Two or more missing children measured only at 0.8B, unscaled | Survivor ladder and placement rule above 0.8B are inferred | Every survivor count at 4B, scaled and unscaled | `configs/subsets-4b.toml` |
-| One rotation seed | Cannot rank settings within ~0.05, including the "within 0.05 of RTN" result | Seeds 1 and 2 for the 9B headline settings | `configs/seed1-9b.toml`, `configs/seed2-9b.toml` |
-| Demo scheme (*g* = 32) never measured | Demo quality ladder is extrapolated from *g* = 64 | Simulate the demo's scheme at 2B, every survivor count | `configs/demo-2b.toml` |
+| ~~Pooled pipeline only screened~~ | Done: H6 holds at 0.8B and 2B | — | `configs/pool-0.8b.toml`, `configs/pool-2b.toml` |
+| ~~Two or more missing children measured only at 0.8B~~ | Done: ordering and placement rule hold at 4B | — | `configs/subsets-4b.toml` |
+| ~~One rotation seed~~ | Done: the 3-bit "within 0.05" claim fails across seeds | — | `configs/seed1-9b.toml`, `configs/seed2-9b.toml` |
+| ~~Demo scheme (*g* = 32) never measured~~ | Done: strict ordering in all four settings ([demo-2b](demo-2b/summary.md)) | — | `configs/demo-2b.toml` |
 | Shards and GGUF export do not support channel scales | The demo cannot use the largest gain phase 1 found | Store scales in the shard set and hash them; check folding for every Qwen3.5 layer type | Code (stages 2.1, 2.2) |
 | Scaling measured only at *N* = 4, φ = ½ | *N* = 8 with scaling is inferred | Low priority: *N* = 4 is the demo's setting | None |
-| Perplexity only | No downstream accuracy | Zero-shot suite on 4B and 9B, 3- and 4-bit, *N* = 4, scaled | Not implemented |
+| ~~Perplexity only~~ | GSM8K and MMLU at 4B and 9B, 3-bit scaled ([swarm report](swarm-report.md)) | — | `configs/swarm-*.toml` |
 | No GPTQ-style reference | Single models compared with RTN and AWQ-style scaling only | Phase 3, as a single-model reference point | Not implemented |
 
 Every listed config submits with `bash slurm/submit.sh <config>`; pool configs run through
@@ -485,6 +520,10 @@ Every listed config submits with `bash slurm/submit.sh <config>`; pool configs r
 | Channel scaling, 4B | [summary](scaling-4b/summary.md), [baselines](scaling-4b/baselines.md) | [recovery](scaling-4b/recovery-p0.5-rot-on-scaled.png), [Pareto](scaling-4b/pareto-p0.5-rot-on-scaled.png) |
 | Channel scaling, 9B | [summary](scaling-9b/summary.md), [baselines](scaling-9b/baselines.md) | [recovery](scaling-9b/recovery-p0.5-rot-on-scaled.png), [Pareto](scaling-9b/pareto-p0.5-rot-on-scaled.png) |
 | Equal memory across sizes | [unscaled](sizes/sizes.md), [scaled](sizes-scaled/sizes.md) | [unscaled](sizes/sizes-p0.5-rot-on.png), [scaled](sizes-scaled/sizes-p0.5-rot-on-scaled.png) |
+| 4B, every survivor count | [summary](subsets-4b/summary.md), [baselines](subsets-4b/baselines.md) | [recovery](subsets-4b/recovery-p0.5-rot-on-scaled.png), [baselines](subsets-4b/baselines-p0.5-rot-on-scaled.png) |
+| Rotation seeds 1 and 2, 9B | [seed 1](seed1-9b/summary.md), [seed 2](seed2-9b/summary.md) | [seed 1 recovery](seed1-9b/recovery-p0.5-rot-on-scaled.png), [seed 2 recovery](seed2-9b/recovery-p0.5-rot-on-scaled.png) |
+| Demo scheme, 2B | [summary](demo-2b/summary.md), [baselines](demo-2b/baselines.md) | [recovery](demo-2b/recovery-p0.5-rot-off-scaled.png) |
+| Pooled pipeline | [0.8B](pool-0.8b/summary.md), [2B](pool-2b/summary.md) | — |
 
 The sweep figures exist for all four (φ, rotation) combinations and the scaling figures for
 all four (rotation, scaling) combinations at φ = ½; the rotated (and scaled) versions are

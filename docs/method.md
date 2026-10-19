@@ -202,7 +202,83 @@ key/value cache. Parameter counts come from each model's config, built on PyTorc
 device, and are checked against the memory each sweep logged. `syncytium-compare` writes the
 comparison.
 
+## Fused agents
+
+The swarm runs whole children rather than pipeline stages: every device holds one complete
+child and is an agent on its own. Any group of live devices can **fuse**. As in the pooled
+pipeline, each device multiplies the same input by its own child at every linear layer, and
+the group averages the outputs before the next nonlinearity. A group of all *N* children
+computes the rebuilt parent. A smaller group computes the mean of its children (the mean
+estimator of "Pooled pipeline"); the interval midpoint is barely better, by 0.005 perplexity
+at 2B with one child missing. Experiments simulate a fused group by setting the model's
+weights to that mean, which is equivalent.
+
+**Losing a member mid-answer.** Every member of a fused group holds the same attention cache,
+built from averaged activations. When a member drops, the survivors keep that cache and
+continue from it. The H13 runs simulate exactly this: the full group writes the first half of
+each answer, then the survivors' weights take over with the group's cache.
+
+**Deciding when to fuse.** A lone agent answers first and escalates to the group when it is
+unsure.
+- *Entropy.* The pre-registered signal is the lone agent's mean token entropy over its answer.
+  It beats chance but recovered too little of the gain (H8 failed).
+- *Disagreement.* Two lone agents answer the same problem, and the group answers only when
+  their final answers differ. This needs agents that differ: identical replicas decoding
+  greedily always agree. Staggered children differ by construction, so the signal is a
+  property of the swarm. It is under confirmation
+  ([disagreement pre-registration](preregistration-disagreement.md)).
+
+## Regrowing a lost child
+
+Every child is a fixed function of the parent code *Q* = Σₖ *q*ₖ: *q*ₖ = ⌊(*Q* + *k*)/*N*⌋.
+Writing *m* = ⌊*Q*/*N*⌋ and *r* = *Q* mod *N*, *q*ₖ = *m* + [*r* + *k* ≥ *N*]. So one weight's
+codes never decrease with *k*, and the last child is at most one above the first. Survivors
+can exploit that structure in two ways.
+
+- **Neighbour bits.** Children *k* − 1 and *k* + 1 bound child *k*'s code to one of two
+  adjacent values, and leave it open at exactly the weights where they differ: 2/*N* of them
+  when residues are uniform. Child *k* + 1 stores one bit for each such weight, so any loss
+  pattern with no two cyclically adjacent members is regrown exactly. The cost is 2/*N* bits
+  per weight per child (0.5 for four children), slightly more for children 0 and *N* − 1
+  because each group's minimum and maximum have residue 0.
+- **Coded residue.** The residue *r*, together with any one surviving child, gives *m* and
+  hence every child and *Q*. The residues, packed to ⌈log₂ *N*⌉ bits, are spread over the *N*
+  children with a Reed–Solomon code over GF(2⁸), so that any *N* − *t* children recover them.
+  The cost is ⌈log₂ *N*⌉/(*N* − *t*) bits per weight per child, which falls as the swarm grows:
+  0.14 for 100 children surviving 50 lost at once. The same data rebuilds the exact parent
+  from any *N* − *t* children, so it subsumes the coded remainder of "Baselines on the same
+  nodes".
+
+Both kinds of data live next to the shards and are never read for serving.
+Regrowth (`syncytium-regrow`) refuses to write anything until the codes it implies reproduce
+the parent hash, and every regrown file must match its recorded SHA-256. Guessing the open codes
+instead does not work: a quarter come out wrong at *N* = 4, the set's rebuild error grows 4x,
+and repeated rounds of guessing grow it more than 100x.
+
+## Speed of a fused group
+
+Experiments swap weights into one model, so they measure what the swarm answers, not how
+fast. Speed comes from a model fixed before measuring (`syncytium.speed`; H9).
+
+- **Rounds.** Traced on the model built without weights: one round per point where outputs
+  must be averaged, with layers that read the same input sharing a round. Qwen3.5 needs four
+  per decoder layer plus the embedding and the output head (130 at 4B and 9B), and each device
+  sends about 1.4–1.7 million values per token. A sixth of those are output logits.
+- **Time.** A pass costs one read of the child's weights at the device's memory bandwidth, plus
+  every round. Each round is an all-reduce by the faster of a direct exchange and a
+  reduce-scatter plus all-gather. The logits need only their argmax.
+- **Speculation.** The requesting agent drafts *k* tokens alone, and the group checks them in
+  one pass. Drafting helps only when the rounds cost more than reading the weights, because a
+  drafted token costs a whole solo pass.
+
+At a wired LAN's 0.2 ms and 1 Gbit/s with 100 GB/s devices, four fused 9B children reach about
+a third of one solo child's speed. A 6-bit model pipelined over the same devices needs about a
+sixth of the fused group's device time per token. Fusing pays for survival, not throughput.
+
 ## System design (container demo)
+
+*Deferred.* The swarm is studied in simulation (see "Fused agents"). This design predates the
+reframe and is kept for the follow-up systems work.
 
 **Roles.** One *main* container serves the parent on the GPU. *N* *child* containers each hold
 one child and serve it on CPU through llama.cpp. All run on one Docker network.

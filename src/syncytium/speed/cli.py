@@ -1,7 +1,8 @@
-"""Command line: ``syncytium-speed run|report CONFIG`` and ``confirm CONFIG RESULTS``.
+"""Command line: ``syncytium-speed run|report CONFIG`` and ``confirm|survival CONFIG RESULTS``.
 
-``confirm`` reports H8b and H10b (``docs/preregistration-disagreement.md``) for a finished task
-run, with per-token costs from the speed run of the same size.
+``confirm`` reports H8b and H10b (``docs/preregistration-disagreement.md``) and ``survival``
+reports H12b (``docs/preregistration-survival.md``) for a finished task run, with per-token
+costs from the speed run of the same size.
 """
 
 import argparse
@@ -13,6 +14,7 @@ from syncytium.speed.config import load_speed_config
 from syncytium.speed.elasticity import write_confirmation
 from syncytium.speed.report import write_report
 from syncytium.speed.runner import run_speed
+from syncytium.speed.survival import write_survival
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -28,6 +30,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     confirm.add_argument("config", type=Path, help="the speed config of the same model size")
     confirm.add_argument("results", type=Path, help="output directory of the task run")
     confirm.add_argument("--out", type=Path, help="defaults to docs/results/<task run name>")
+    survive = commands.add_parser("survival", help="report H12b for a task run")
+    survive.add_argument("config", type=Path, help="the speed config of the same model size")
+    survive.add_argument("results", type=Path, help="output directory of the task run")
+    survive.add_argument("--out", type=Path, help="defaults to docs/results/<task run name>")
     args = parser.parse_args(argv)
     config = load_speed_config(args.config)
     if args.command == "run":
@@ -39,7 +45,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         write_report(config, args.out or Path("docs/results") / config.name)
     else:
         out = args.out or Path("docs/results") / args.results.name
-        write_confirmation(args.results, config, out)
+        write = write_confirmation if args.command == "confirm" else write_survival
+        write(args.results, config, out)
 
 
 if __name__ == "__main__":

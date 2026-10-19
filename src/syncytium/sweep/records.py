@@ -1,6 +1,7 @@
 """Sweep outputs: an append-only results log and per-invocation run metadata."""
 
 import json
+import os
 import platform
 import subprocess
 from datetime import UTC, datetime
@@ -39,7 +40,10 @@ class ResultLog:
 
 
 def append_run_metadata(path: Path, config_path: Path) -> None:
-    """Record what produced this run: config, code version, packages and hardware."""
+    """Record what produced this run: config, code version, packages, hardware and job.
+
+    Under SLURM, the job id and node tie the run to its log in ``slurm_logs/``.
+    """
     record = {
         "started": datetime.now(UTC).isoformat(timespec="seconds"),
         "config": config_path.read_text(encoding="utf-8"),
@@ -50,6 +54,8 @@ def append_run_metadata(path: Path, config_path: Path) -> None:
         "torch": torch.__version__,
         "transformers": transformers.__version__,
         "device": torch.cuda.get_device_name() if torch.cuda.is_available() else "cpu",
+        "host": platform.node(),
+        "slurm_job": os.environ.get("SLURM_JOB_ID"),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as file:

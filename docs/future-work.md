@@ -3,6 +3,24 @@
 Studies that can branch from the core result, grouped by theme. Each states the question and
 why it matters.
 
+## The swarm
+
+- **Real devices and networks.** Fused agents on separate machines over a LAN and over
+  Wi-Fi: tokens per second, bytes per token and time to recover a member, against the
+  speed model of H9.
+- **Instruction-tuned agents in an agent loop.** Multi-step tasks where agents work alone,
+  fuse when they disagree, and keep going while members fail and regrow.
+- **Cheaper fusion.** Fusing costs about six times the device time of a pipeline at similar
+  accuracy. Averaging only some layers, exchanging fewer logits, or fusing two members
+  instead of all could narrow that gap.
+- **Routing beyond disagreement.** If disagreement is confirmed, how many agents should
+  answer before deciding, and whether partial fusion (two or three members) is enough for
+  most escalations.
+- **Large swarms.** Which members to fuse when only some are reachable (H16), how the
+  coded residue scales to hundreds of members, and placement across failure domains.
+- **Channel scales in shards.** Scaled children are the best ones, but shard files cannot
+  store the shared scales yet, so the console's swarms are unscaled.
+
 ## Precision and quality
 
 - **Bit-exact recovery.** Store the bits below the rebuilt grid as an erasure-coded residual
@@ -44,7 +62,8 @@ why it matters.
 - **Progressive rebuild.** Serve from the best available partial rebuild and refine it as
   children reconnect, measuring quality over time after a failure.
 - **Distributed inference without a rebuild.** Whether children can cooperate on a single
-  forward pass efficiently, compared with tensor and expert parallelism.
+  forward pass efficiently, compared with tensor and expert parallelism. Fused agents do
+  this in simulation; H9's model says it is affordable on a LAN for 9B but not efficient.
 
 ## Security and governance
 
@@ -53,4 +72,5 @@ why it matters.
 - **Integrity.** Signed manifests and detection of a tampered or poisoned child before it
   contaminates a rebuild.
 - **Operator control under failure.** Formal guarantees that revoke and shutdown commands
-  reach every node and take effect even during partitions and rebuilds.
+  reach every node and take effect even during partitions, rebuilds and regrowth: a swarm
+  that regrows members must never regrow one the operator has revoked.

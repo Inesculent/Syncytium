@@ -18,6 +18,9 @@ scaling = true
 seed = 0
 estimator = "mean"
 drop = true
+# Added for H12b (docs/preregistration-survival.md): the 6-bit model of the replicated
+# pipelines. Rerunning evaluates only this condition; everything else is already logged.
+rtn_bits = [6]
 
 [gsm8k]
 split = "test"

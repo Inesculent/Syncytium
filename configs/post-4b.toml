@@ -1,0 +1,24 @@
+# H17 of docs/preregistration-swarm.md, post-trained series (see its 2026-10-18 clarification):
+# Qwen3.5 has no 27B Base, so H17 is judged on the post-trained 27B, and the same sweep runs on
+# the post-trained 0.8B-9B for the trend. 2-, 3- and 4-bit children, N = 4, phi = 1/2, rotated
+# and scaled; each child, the full rebuild, every rebuild with one child missing, and scaled,
+# rotated round-to-nearest models. WikiText-2 test perplexity, as in phase 1.
+name = "post-4b"
+output = "results/post-4b"
+
+[model]
+path = "Qwen/Qwen3.5-4B"
+
+[eval]
+window = 2048
+
+[grid]
+bits = [2, 3, 4]
+group_sizes = [64]
+children = [4]
+phases = [0.5]
+rotation = [true]
+scaling = [true]
+seed = 0
+max_missing = 1
+rtn_bits = [2, 3, 4]

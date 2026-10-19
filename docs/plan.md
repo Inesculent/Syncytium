@@ -13,11 +13,31 @@ own. Decisions taken while planning are recorded at the end.
 | 1.4 Sweep runner | TOML configs; resumable JSONL results with config, seed, versions and commit. Offsets for *N* = 2 and 4 are subsets of *N* = 8, so only 8 distinct children are evaluated per setting. Includes an offset-phase ablation, *k*/*N* versus (*k* + ½)/*N* (see below). | `scripts/`, `configs/` |
 | 1.5 Shared rotation | Block-diagonal randomized Hadamard transform with block size equal to the group size. Test that the rebuild identity still holds. | `src/syncytium/quant/` |
 | 1.6 Pilot and sweep | Report module (summary table with H3/H4 checks, recovery, Pareto and offset figures) and SLURM scripts. 0.8B pilot; fix the usable-child threshold in the hypothesis document; run 2B (locally or on the cluster), and 4B and 9B on the cluster (4B's bf16 weights alone exceed a 10 GB GPU); write-up. Done at all four sizes; the write-up is the [phase 1 report](results/phase-1-report.md). | `src/syncytium/report/`, `slurm/`, `docs/results/` |
-| 1.7 Pooled pipeline | Stages of the parent held by *N* devices with one child each; a stage averages its live devices' outputs, which with all alive equals the parent exactly. `syncytium-pool` evaluates every single-device loss, every stage on one child, and random loss patterns with their per-stage components, under the mean and midpoint estimators; the summary checks H6b and H6c. Pool grids take `rotation` and `scaling` like the sweep grid. Run at 0.8B (`pool-0.8b`, 4-bit, rotated), then 2B (`pool-2b`, 3-bit, rotated and scaled, the setting a pooled demo would use). Only the pipeline check (`pool-screen-0.8b`) has run. | `src/syncytium/pool/`, `configs/pool-*.toml` |
-| 1.8 Baselines | Staggered children against the same model on every node and against a base child plus an erasure-coded remainder, by surviving nodes and memory per node (see [method](method.md#baselines-on-the-same-nodes)); computed from sweep logs by `syncytium-report`. Model sizes compared at equal memory per node (see [method](method.md#equal-memory-per-node)) by `syncytium-compare`. `configs/subsets-0.8b.toml` measures every survivor count for *N* = 4 at 0.8B, including the two-of-four rebuilds the pilot lacks (about 1.6 h); done. `configs/subsets-4b.toml` repeats it at 4B, at φ = ½, with and without rotation and scaling (209 conditions, about 2 h). | `src/syncytium/report/`, `configs/` |
-| 1.9 Channel scaling | AWQ-style activation-aware channel scales shared by every child (see [method](method.md#optional-channel-scaling)), searched per weight on calibration text from the train split; a `scaling` option in the sweep grid next to `rotation`. Answers "why not a better quantizer": scaling composes with staggering exactly, while GPTQ-style error feedback does not. `configs/scaling-{0.8b,2b,4b,9b}.toml` compare scaled and unscaled children and single models at each size; done. `configs/seed{1,2}-9b.toml` repeat the 9B 3- and 4-bit settings with two more rotation seeds, to show which differences of a few hundredths are real (about 30 min each). | `src/syncytium/quant/`, `src/syncytium/models/`, `configs/` |
+| 1.7 Pooled pipeline | Stages of the parent held by *N* devices with one child each; a stage averages its live devices' outputs, which with all alive equals the parent exactly. `syncytium-pool` evaluates every single-device loss, every stage on one child, and random loss patterns with their per-stage components, under the mean and midpoint estimators; the summary checks H6b and H6c. Pool grids take `rotation` and `scaling` like the sweep grid. Run at 0.8B (`pool-0.8b`, 4-bit, rotated), then 2B (`pool-2b`, 3-bit, rotated and scaled, the setting a pooled demo would use). Done: H6 holds at both sizes. | `src/syncytium/pool/`, `configs/pool-*.toml` |
+| 1.8 Baselines | Staggered children against the same model on every node and against a base child plus an erasure-coded remainder, by surviving nodes and memory per node (see [method](method.md#baselines-on-the-same-nodes)); computed from sweep logs by `syncytium-report`. Model sizes compared at equal memory per node (see [method](method.md#equal-memory-per-node)) by `syncytium-compare`. `configs/subsets-0.8b.toml` measures every survivor count for *N* = 4 at 0.8B, including the two-of-four rebuilds the pilot lacks (about 1.6 h); done. `configs/subsets-4b.toml` repeats it at 4B, at φ = ½, with and without rotation and scaling (209 conditions, about 2 h); done. | `src/syncytium/report/`, `configs/` |
+| 1.9 Channel scaling | AWQ-style activation-aware channel scales shared by every child (see [method](method.md#optional-channel-scaling)), searched per weight on calibration text from the train split; a `scaling` option in the sweep grid next to `rotation`. Answers "why not a better quantizer": scaling composes with staggering exactly, while GPTQ-style error feedback does not. `configs/scaling-{0.8b,2b,4b,9b}.toml` compare scaled and unscaled children and single models at each size; done. `configs/seed{1,2}-9b.toml` repeat the 9B 3- and 4-bit settings with two more rotation seeds, to show which differences of a few hundredths are real (about 30 min each); done. | `src/syncytium/quant/`, `src/syncytium/models/`, `configs/` |
 
-## Phase 2: Container demo
+## Phase 2: The swarm, in simulation
+
+After phase 1 the project was reframed as a swarm of agents (see the
+[swarm pre-registration](preregistration-swarm.md)). Every claim is proven by unit tests,
+measured in simulation on the cluster, or modelled from exact counts; real networks and
+containers are follow-up work.
+
+| Stage | Scope | Location |
+|-------|-------|----------|
+| 2.S1 Task harness | GSM8K (8-shot chain of thought) and MMLU (5-shot) for bf16, every child, every fused group and the full group losing each member mid-answer; per-answer logs; the pre-registered checks (H7, H8, H11, H13). Gate A ran at 9B and 4B. Done. | `src/syncytium/tasks/`, `configs/swarm-*.toml` |
+| 2.S2 Regrowth | Neighbour bits and an erasure-coded residue (Reed–Solomon over GF(2⁸)) next to the shards; hash-checked regrowth of lost members (H14, H15). Done. | `src/syncytium/quant/regrow.py`, `src/syncytium/shards/` |
+| 2.S3 Speed model | Rounds traced from the architecture, drafting agreement measured on the cluster, tokens per second under a stated network model (H9). Done. | `src/syncytium/speed/`, `configs/speed-*.toml` |
+| 2.S4 Swarm console | `syncytium-swarm`: real child shards as agents in one process; ask, solo, fuse, kill and regrow. Done. | `src/syncytium/swarm/` |
+| 2.S5 Escalation on disagreement | Confirm H8b and H10b on GSM8K train problems at 9B and 4B, with a 6-bit round-to-nearest model as the static splits' large model. Done: H8b holds and H10b fails at both sizes. | `configs/confirm-*.toml`, `src/syncytium/tasks/disagreement.py`, `src/syncytium/speed/elasticity.py` |
+| 2.S6 Survival | H12b ([survival pre-registration](preregistration-survival.md)): expected per-request accuracy under device loss, against two cross-routed 6-bit pipelines, no backup, judged at 10–30% failure. Code done; needs the 6-bit model's GSM8K accuracy (`rtn_bits = [6]` in the swarm configs). | `src/syncytium/speed/survival.py` |
+| 2.S7 Remaining | H16 (fusion partners, *N* = 16), the regrowth negative control's perplexity. | — |
+
+## Deferred: container demo
+
+Written for the original framing. Stage 2.1 is done and serves the swarm; the rest waits for
+follow-up systems work.
 
 | Stage | Scope |
 |-------|-------|
@@ -31,9 +51,13 @@ own. Decisions taken while planning are recorded at the end.
 
 ## Phase 3: Cluster
 
-Qwen3.5 27B dense, zero-shot evaluations, GPTQ as a single-model reference baseline (AWQ-style
-scaling is covered by stage 1.9). The 9B sweeps and the SLURM scripts are done. A combined expert-split and staggered-precision study for MoE models is a
-candidate follow-up.
+- **27B and H17.** Whether 2-bit children become usable at 27B. No 27B Base exists, so H17
+  runs on the post-trained series 0.8B–27B (`configs/post-*.toml`); queued.
+- **GPTQ** as a single-model reference baseline. AWQ-style scaling is covered by stage 1.9.
+- **Instruction-tuned agents.**
+
+The 9B sweeps and the SLURM scripts are done. A combined expert-split and staggered-precision
+study for MoE models is a candidate follow-up.
 
 ## Known risks
 
@@ -51,6 +75,14 @@ candidate follow-up.
   first scaling runs died this way after logging a start with `device: cpu`.
   `slurm/sweep.sbatch` now stops at once with `CUDA unavailable on this node`. The known bad
   node is `evc26`; submit with `--exclude=evc26`.
+- ~~A command added after the cluster's environment was installed does not exist there~~:
+  the first pool runs failed with `syncytium-pool: command not found`, because an editable
+  install picks up new code but not new commands. `slurm/sweep.sbatch` now starts task and
+  speed runs as modules (`python -m …`), which needs no reinstall.
+- The swarm's case rests on survival. On a reliable network, a 6-bit model pipelined over
+  the same devices is several times faster than fusing at similar accuracy (H10b is
+  registered as expected to fail), so H12 (survival under churn) decides whether the
+  swarm has an advantage at all.
 
 ## Observations
 
@@ -109,6 +141,17 @@ candidate follow-up.
   children of a set become nearly interchangeable (9B 3-bit: 7.86–7.90). Without rotation the
   scaled 3-bit children still trail by about 0.2. At equal memory, any three of four scaled
   children beat the best single model in every setting, 2-bit included.
+- **Fusion recovers the parent's task accuracy** (Gate A). Four fused 3-bit children solve
+  86.1% of GSM8K at 9B (bf16 86.2%; lone children 76.8–81.8%) and 82.9% at 4B (bf16 82.6%;
+  68.0–74.2%). Children whose perplexities differ by hundredths differ by 5–6 points on
+  GSM8K.
+- **Entropy is a weak escalation signal; disagreement is a strong one.** Escalating the
+  30% most uncertain answers recovers 36–42% of the fusion gain (H8 fails). Escalating when
+  two lone agents give different answers recovered 94–104% while escalating 26–37%. That was
+  found after the fact, then confirmed on fresh problems: 92–110% while escalating 23–35%
+  (H8b holds at both sizes).
+- **The 3-bit "within 0.05 of RTN" result was one seed's luck.** Across three rotation seeds
+  at 9B the gap is 0.05–0.09 at 3 bits, though still at most 0.014 at 4 bits.
 - **Open question: rotation block size.** The rotation currently mixes values only within one
   quantization group. Larger blocks spread outliers further and may help low-bit children
   more; a candidate ablation once the pilot is in.
@@ -122,4 +165,10 @@ candidate follow-up.
 | Thresholds | Set after the 0.8B pilot and before the full sweep: H2 needs the worst child within 1.5x of bf16 perplexity; H3 stays at 0.5; H4 applies for *N* ≥ 3 (see [hypothesis](hypothesis.md#what-results-would-mean)). |
 | Quantizer baselines | AWQ-style channel scaling added in stage 1.9, because it composes with staggering exactly. GPTQ-style error feedback does not compose and stays a phase 3 single-model reference. |
 | Control plane versus agent layer | Leader election, rebuild decisions and verification are deterministic code with no model in the loop: they need guarantees, must be testable, and keep the operator's revoke authoritative. LangGraph appears only in the agent layer (2.6), where it chooses which model answers a request using health reported by the control plane; it never decides whether to rebuild or which nodes exist. |
+| Swarm reframe | After phase 1 the goal became a swarm that survives, not a protected single model: lone agents, fusion on demand, exact regrowth. The original hypotheses stand; H5 is superseded. |
+| Simulation only | Networks are modelled, not measured; the paper shows the swarm is possible, and real systems are follow-up work. |
+| Pre-registration | Every new hypothesis and threshold is committed before its data exists; clarifications are dated and kept; failures are reported, and a failed hypothesis's registered consequence stands (H8 failing dropped H10). |
+| Models and tasks | Base checkpoints, as in phase 1; GSM8K primary, MMLU exploratory; debugging only on the GSM8K train and MMLU dev splits. |
+| Fusion estimator | The mean of the live children, what devices compute by averaging outputs; the midpoint was within 0.005 in `pool-2b`. |
+| Regrowth | Exact only: neighbour bits for small swarms, the coded residue for several simultaneous losses. Guessing degrades the set and drifts. |
 | MoE expert splitting | Not pursued now: well covered by expert-pruning work and cluster-only. Kept as a phase 3 extension combined with staggered precision. |

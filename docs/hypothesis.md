@@ -1,5 +1,12 @@
 # Hypothesis and Goals
 
+> **Reframed after phase 1.** The project now studies a swarm of agents that answer alone, fuse
+> on demand and regrow lost members. Those hypotheses are in the
+> [swarm pre-registration](preregistration-swarm.md) (H7–H17) and the
+> [disagreement pre-registration](preregistration-disagreement.md) (H8b, H10b). H1–H4 and H6
+> stand as fixed below; H5 is superseded by H13–H15. The outcome of every hypothesis is listed
+> in the [swarm report](results/swarm-report.md#status-of-every-hypothesis).
+
 ## Motivation
 
 A deployed LLM is usually a single artifact on a single host. If that host is lost, the model

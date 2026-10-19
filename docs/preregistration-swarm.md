@@ -315,3 +315,20 @@ ones rather than the most favourable, and they are recorded before any H9 number
   agrees when the lone child's greedy choice equals the full group's. Tokens per cycle are
   simulated along that text, with no independence assumption. The drafter is the child that
   agrees least, and *k* is the best of 0 (no speculation) to 8; every *k* is reported.
+
+**2026-10-18, H17 checkpoint, fixed before any post-trained model was evaluated.** Qwen3.5 has
+no 27B Base checkpoint. The 27B exists only post-trained (`Qwen/Qwen3.5-27B`), and every
+larger Qwen3.5 model is a mixture of experts, which this study excludes.
+
+- *Model.* H17 is judged on `Qwen/Qwen3.5-27B` with the criterion unchanged: the worst 2-bit
+  child, scaled and rotated (*N* = 4, φ = ½, *g* = 64), is within 1.5x of that model's own
+  bf16 WikiText-2 test perplexity.
+- *Context.* Mixing a post-trained 27B point into a Base trend would confound size with
+  post-training. So the same sweep runs on the post-trained 0.8B, 2B, 4B and 9B, and the
+  trend is read from that series alone (`configs/post-*.toml`). The Base results elsewhere
+  stand.
+- *No prediction carries over.* The 1.35x extrapolation in H17's text was made from Base
+  models and does not apply to post-trained ones; no post-trained result existed when this
+  was written.
+- *The follow-up.* "Repeat H7 at 27B 2-bit" is decided after H17's result. Any protocol change
+  for a post-trained model (for example a chat template) is registered before that run.

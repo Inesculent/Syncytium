@@ -45,25 +45,29 @@ The code accompanies a paper, so readers should be able to check it against the
 Current:
 
 ```
-configs/                sweep and pooled-pipeline configs (TOML)
-docs/                   hypothesis, method, plan, cluster guide and future work
-docs/results/           summary tables and figures written by syncytium-report
+configs/                sweep, pooled-pipeline, task and speed configs (TOML)
+docs/                   hypothesis, pre-registrations, method, plan, cluster guide, future work
+docs/results/           reports, summary tables and figures written by the report commands
 slurm/                  cluster setup, job script and submission helper
-src/syncytium/quant/    staggered quantization, rebuild, partial rebuild, simulation
+src/syncytium/quant/    staggered quantization, rebuild, partial rebuild, regrowth, simulation
 src/syncytium/models/   loading the text stack, choosing weights, swapping weights in place
 src/syncytium/eval/     corpus, perplexity and memory accounting
 src/syncytium/sweep/    sweep configs, conditions, results log, runner and CLI
 src/syncytium/report/   summary tables (with hypothesis checks) and paper figures
-src/syncytium/shards/   bit packing, shard files, manifests, verification and rebuild
+src/syncytium/shards/   bit packing, shard files, manifests, verification, rebuild, regrowth
 src/syncytium/pool/     pooled pipeline: stage layout, device-loss states, runner, summary
+src/syncytium/tasks/    GSM8K and MMLU for lone and fused agents, pre-registered checks
+src/syncytium/speed/    rounds, drafting agreement and the network model of fused agents
+src/syncytium/swarm/    the swarm console: shards as agents that fuse, die and regrow
+src/syncytium/runs/     status of every configured run (syncytium-runs)
 tests/                  unit tests, mirroring the package layout
 ```
 
 Planned as work lands:
 
 ```
-src/syncytium/export/   GGUF writer for children (stage 2.2)
-src/syncytium/harness/  container roles, heartbeats, shard transfer, operator controls (2.3)
+src/syncytium/export/   GGUF writer for children (deferred stage 2.2)
+src/syncytium/harness/  container roles, heartbeats, shard transfer, operator controls (deferred)
 docker/                 Dockerfiles and compose files
 ```
 

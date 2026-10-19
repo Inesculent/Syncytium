@@ -64,6 +64,7 @@ syncytium-pool = "syncytium.pool.cli:main"
 syncytium-tasks = "syncytium.tasks.cli:main"
 syncytium-speed = "syncytium.speed.cli:main"
 syncytium-swarm = "syncytium.swarm.cli:main"
+syncytium-runs = "syncytium.runs.cli:main"
 
 [tool.hatch.version]
 path = "src/syncytium/__init__.py"
