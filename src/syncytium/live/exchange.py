@@ -32,7 +32,9 @@ class Exchange:
         addresses: Address of every member, by member index.
         members: The members of the group when the request starts.
         timeout: Seconds the leader waits for a contribution. Members wait longer for a
-            result, so a leader waiting out a dead member is not itself taken for dead.
+            result, so a leader waiting out a dead member is not itself taken for dead. Every
+            wait also allows the time an emulated link needs to move the round's vectors
+            through the leader.
     """
 
     def __init__(
@@ -50,8 +52,14 @@ class Exchange:
         self.events: list[dict[str, Any]] = []
         # One (values, live members, seconds) per round, for the communication check (g).
         self.timing: list[tuple[int, int, float]] = []
+        self._slack = 0.0
         self._results: dict[int, Tensor] = {}
         self._buffer: dict[int, dict[int, Tensor]] = {}
+
+    @property
+    def _patience(self) -> float:
+        """How long a member waits on the leader before taking it for dead."""
+        return 2.5 * self.timeout + 2 * self._slack
 
     @property
     def leader(self) -> int:
@@ -64,6 +72,8 @@ class Exchange:
         r = self.round
         start, live = time.monotonic(), len(self.members)
         local = x.detach().to("cpu")
+        size = local.numel() * local.element_size()
+        self._slack = 2 * live * self.endpoint.link.serialize(size)
         result = self._lead(r, local) if self.leader == self.me else self._follow(r, local)
         self.timing.append((local.numel(), live, time.monotonic() - start))
         self._results[r] = result
@@ -72,7 +82,7 @@ class Exchange:
 
     def _lead(self, r: int, local: Tensor) -> Tensor:
         contributions = {self.me: local, **self._buffer.pop(r, {})}
-        deadline = time.monotonic() + self.timeout
+        deadline = time.monotonic() + self.timeout + self._slack
         for member in [m for m in self.members if m not in contributions]:
             message = self.endpoint.inbox.take(
                 lambda msg, m=member: msg.kind == CONTRIB and msg.round == r and msg.sender == m,
@@ -102,7 +112,7 @@ class Exchange:
     def _await_result(self, r: int) -> Tensor | None:
         """Wait for round ``r``'s result from the leader, answering its requests meanwhile."""
         leader = self.leader
-        deadline = time.monotonic() + 2.5 * self.timeout
+        deadline = time.monotonic() + self._patience
         while (left := deadline - time.monotonic()) > 0:
             message = self.endpoint.inbox.take(
                 lambda msg: msg.sender == leader and msg.kind in (RESULT, WANT), left
@@ -136,7 +146,7 @@ class Exchange:
 
     def _collect_states(self) -> dict[int, Message]:
         states = {}
-        deadline = time.monotonic() + 2.5 * self.timeout
+        deadline = time.monotonic() + self._patience
         for member in [m for m in self.members if m != self.me]:
             message = self.endpoint.inbox.take(
                 lambda msg, m=member: msg.kind == STATE and msg.sender == m,
@@ -153,7 +163,7 @@ class Exchange:
         self.endpoint.send(member, self.addresses[member], Message(WANT, self.me, r))
         message = self.endpoint.inbox.take(
             lambda msg: msg.kind == RESULT and msg.round == r and msg.sender == member,
-            2.5 * self.timeout,
+            self._patience,
         )
         if message is None:
             raise RuntimeError(f"member {member} had round {r}'s result but did not send it")

@@ -33,6 +33,7 @@ containers are follow-up work.
 | 2.S5 Escalation on disagreement | Confirm H8b and H10b on GSM8K train problems at 9B and 4B, with a 6-bit round-to-nearest model as the static splits' large model. Done: H8b holds and H10b fails at both sizes. | `configs/confirm-*.toml`, `src/syncytium/tasks/disagreement.py`, `src/syncytium/speed/elasticity.py` |
 | 2.S6 Survival | H12b ([survival pre-registration](preregistration-survival.md)): expected per-request accuracy under device loss, against two cross-routed 6-bit pipelines, no backup, judged at 10–30% failure. Done: H12b holds at 9B and 4B. | `src/syncytium/speed/survival.py` |
 | 2.S7 Remaining | H16 (fusion partners, *N* = 16), the regrowth negative control's perplexity. | — |
+| 2.S8 Live swarm | H18 ([demo pre-registration](preregistration-demo.md)): the swarm as separate processes on four GPUs across two nodes, under scripted crashes and destruction, next to the replicated 6-bit pipeline. Built and tested on a tiny CPU model; next, 4B development runs, then the final 9B runs. | `src/syncytium/live/`, `configs/live-*.toml`, `slurm/live.sbatch` |
 
 ## Deferred: container demo
 

@@ -1,0 +1,29 @@
+# H18 development at 4B (docs/preregistration-demo.md): the same live runs as live-9b, to
+# find and fix problems before the final runs. Development runs are not results. Submit with,
+# for example:
+#   SCENARIO=A NETWORK=cluster bash slurm/submit.sh configs/live-4b.toml --exclude=evc26
+name = "live-4b"
+output = "results/live-4b"
+
+[model]
+path = "Qwen/Qwen3.5-4B-Base"
+
+[live]
+children = "shards/live-4b/children"
+baseline = "shards/live-4b/rtn6"
+storage = "/tmp/syncytium-live"
+bits = 3
+group_size = 64
+rotation_seed = 0
+baseline_bits = 6
+residue_losses = 2
+memory_gb = 8.0
+timeout = 5.0
+max_new_tokens = 256
+per_phase = 8
+probe_problems = 16
+die_after = 32
+
+[live.lan]
+latency = 0.0002
+bandwidth = 1e9

@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from transformers import PretrainedConfig
+from transformers import AutoTokenizer, PretrainedConfig
 
 from syncytium.live.exchange import Exchange
 from syncytium.live.packed import load_member, packed_bytes, set_exchange
@@ -43,7 +43,6 @@ CONTROLLER = 99
 HEARTBEAT = 0.5  # seconds between heartbeats
 CHUNK = 1 << 26  # bytes per file-transfer message
 WORK = "regrow-work"  # where survivors' files are copied while regrowing
-COMMANDS = ("load", "solo", "fuse", "probe", "die", "regrow", "stop")
 PROBE_TAIL = 16  # positions whose logits a probe returns
 
 
@@ -61,7 +60,8 @@ class DeviceSettings:
         controller: The controller's address.
         device: Torch device for its model.
         memory_gb: Cap on its GPU memory, or ``None``.
-        timeout: The averaging layer's timeout, in seconds.
+        timeout: Seconds to wait for another device before taking it for dead.
+        stage: The pipeline stage it holds, for a device of the baseline; else ``None``.
     """
 
     index: int
@@ -70,6 +70,7 @@ class DeviceSettings:
     device: str = "cuda"
     memory_gb: float | None = None
     timeout: float = 5.0
+    stage: int | None = None
 
 
 class Device:
@@ -97,6 +98,8 @@ class Device:
         self.crash = crash or (lambda: os._exit(1))
         self.model: Any = None
         self.address: tuple[str, int] = endpoint.address
+        # Heartbeats and commands never queue behind data on an emulated link.
+        endpoint.direct = frozenset({CONTROLLER})
         self._stopped = threading.Event()
         if settings.device.startswith("cuda") and settings.memory_gb:
             total = torch.cuda.get_device_properties(settings.device).total_memory
@@ -104,14 +107,15 @@ class Device:
 
     def run(self) -> None:
         """Register, then serve the controller's commands until stopped or crashed."""
-        info = {"address": list(self.address), "has_shard": self._shard().exists()}
+        info = {"address": list(self.address), "has_model": self._model_file().exists()}
         self._tell("hello", info)
-        for target in (self._beat, self._serve_files):
+        for target in (self._beat, self._serve_files, *self.services()):
             threading.Thread(target=target, daemon=True).start()
+        kinds = set(self.handlers())
         try:
             while not self._stopped.is_set():
                 command = self.endpoint.inbox.take(
-                    lambda m: m.sender == CONTROLLER and m.kind in COMMANDS, 0.5
+                    lambda m: m.sender == CONTROLLER and m.kind in kinds, 0.5
                 )
                 if command is not None:
                     self._handle(command)
@@ -121,8 +125,9 @@ class Device:
             self._stopped.set()
             self.endpoint.close()
 
-    def _handle(self, command: Message) -> None:
-        handler = {
+    def handlers(self) -> dict[str, Callable[[Message], None]]:
+        """The controller's commands this device obeys, by kind."""
+        return {
             "load": self._load,
             "solo": self._solo,
             "fuse": self._fuse,
@@ -130,12 +135,14 @@ class Device:
             "die": self._die,
             "regrow": self._regrow,
             "stop": lambda _: self._stopped.set(),
-        }[command.kind]
-        handler(command)
+        }
+
+    def _handle(self, command: Message) -> None:
+        self.handlers()[command.kind](command)
 
     def _load(self, command: Message) -> None:
         """Load its child if its shard matches the hash the controller expects."""
-        path = self._shard()
+        path = self._model_file()
         actual = file_sha256(path) if path.exists() else None
         if actual != command.info["sha256"]:
             self._tell("refused", {"request": command.info["request"], "sha256": actual})
@@ -143,13 +150,21 @@ class Device:
         self.model = load_member(
             self.settings.storage, self.index, self.settings.device, self.model_config
         )
-        if self.tokenizer is None:
-            from transformers import AutoTokenizer
-
-            manifest = Manifest.load(self.settings.storage / MANIFEST_NAME)
-            self.tokenizer = AutoTokenizer.from_pretrained(manifest.model)
+        self._ensure_tokenizer()
+        self._warm_up(lambda ids: self.model(input_ids=ids))
         info = {"request": command.info["request"], "sha256": actual}
         self._tell("ready", info | {"packed_bytes": packed_bytes(self.model)})
+
+    def _warm_up(self, forward: Callable[[torch.Tensor], Any]) -> None:
+        """Run one token alone, so start-up costs never land in a timed or fused pass."""
+        with torch.no_grad():
+            forward(torch.tensor([[2]], device=self.settings.device))
+
+    def _ensure_tokenizer(self) -> None:
+        """Load the manifest model's tokenizer unless one was given."""
+        if self.tokenizer is None:
+            manifest = Manifest.load(self.settings.storage / MANIFEST_NAME)
+            self.tokenizer = AutoTokenizer.from_pretrained(manifest.model)
 
     def _solo(self, command: Message) -> None:
         start = time.monotonic()
@@ -189,7 +204,7 @@ class Device:
             "top1": raw.argmax(dim=-1).tolist(),
             "sha256": digest,
             "members": exchange.members,
-            "timing": exchange.timing,
+            "timing": summarize_timing(exchange.timing),
         }
         self._tell("probe", info, raw[-PROBE_TAIL:].float())
 
@@ -208,10 +223,7 @@ class Device:
         info, storage = command.info, self.settings.storage
         work = storage / WORK
         work.mkdir(parents=True, exist_ok=True)
-        moved = 0
-        for source, names in info["files"].items():
-            for name in names:
-                moved += self._fetch(int(source), tuple(info["sources"][source]), name, work)
+        moved = self._fetch_all(info, work)
         lost = info["lost"]
         regrow_shards(work, lost, Redundancy(info["kind"]))
         for kind in info["restore"]:
@@ -225,11 +237,23 @@ class Device:
             "regrown",
             {
                 "request": info["request"],
-                "sha256": file_sha256(self._shard()),
+                "sha256": file_sha256(self._model_file()),
                 "bytes": moved,
                 "seconds": time.monotonic() - start,
             },
         )
+
+    def services(self) -> list[Callable[[], None]]:
+        """Loops run in their own threads besides heartbeats and file serving."""
+        return []
+
+    def _fetch_all(self, info: dict[str, Any], into: Path) -> int:
+        """Copy ``info["files"]`` (names by source) from ``info["sources"]``; bytes moved."""
+        moved = 0
+        for source, names in info["files"].items():
+            for name in names:
+                moved += self._fetch(int(source), tuple(info["sources"][source]), name, into)
+        return moved
 
     def _fetch(self, source: int, address: tuple[str, int], name: str, work: Path) -> int:
         """Copy file ``name`` from device ``source`` into ``work``; return its size."""
@@ -291,40 +315,71 @@ class Device:
         }
         if exchange is not None:
             info |= {"members": exchange.members, "events": exchange.events}
-            info["timing"] = exchange.timing
+            info["timing"] = summarize_timing(exchange.timing)
         self._tell("answer", info)
 
     def _tell(self, kind: str, info: dict[str, Any], tensor: torch.Tensor | None = None) -> None:
         message = Message(kind, self.index, info=info, tensor=tensor)
         self.endpoint.send(CONTROLLER, self.settings.controller, message)
 
-    def _shard(self) -> Path:
+    def _model_file(self) -> Path:
         return self.settings.storage / shard_name(self.index)
 
     def _peak(self) -> int:
         if self.settings.device.startswith("cuda"):
-            return torch.cuda.max_memory_allocated(self.settings.device)
+            return torch.cuda.max_memory_reserved(self.settings.device)
         return 0
 
 
-def main(argv: Sequence[str] | None = None) -> None:
-    """Run one device until the controller stops it."""
+def summarize_timing(timing: Sequence[tuple[int, int, float]]) -> list[list[float]]:
+    """Averaging rounds grouped by (values, live members): ``[values, live, rounds, seconds]``.
+
+    The first round of a request is left out, since it also waits for every member to start.
+    """
+    groups: dict[tuple[int, int], list[float]] = {}
+    for values, live, seconds in timing[1:]:
+        group = groups.setdefault((values, live), [0, 0.0])
+        group[0] += 1
+        group[1] += seconds
+    return [[values, live, n, total] for (values, live), (n, total) in sorted(groups.items())]
+
+
+def device_from_args(argv: Sequence[str] | None = None, **overrides: Any) -> Device:
+    """The device a command line describes; ``overrides`` go to its constructor."""
     parser = argparse.ArgumentParser(description=main.__doc__)
     parser.add_argument("--index", type=int, required=True)
     parser.add_argument("--storage", type=Path, required=True)
     parser.add_argument("--controller", required=True, help="HOST:PORT")
+    parser.add_argument("--host", default="", help="interface to listen on; default all")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--memory-gb", type=float)
+    parser.add_argument("--stage", type=int, help="the pipeline stage it holds (baseline)")
+    parser.add_argument("--timeout", type=float, default=5.0, help="seconds to wait for a peer")
     parser.add_argument("--latency", type=float, default=0.0, help="emulated, seconds")
     parser.add_argument("--bandwidth", type=float, default=0.0, help="emulated, bits per second")
     args = parser.parse_args(argv)
     host, port = args.controller.rsplit(":", 1)
     settings = DeviceSettings(
-        args.index, args.storage, (host, int(port)), args.device, args.memory_gb
+        args.index,
+        args.storage,
+        (host, int(port)),
+        args.device,
+        args.memory_gb,
+        args.timeout,
+        args.stage,
     )
-    endpoint = Endpoint(args.index, link=Link(args.latency, args.bandwidth))
+    endpoint = Endpoint(args.index, link=Link(args.latency, args.bandwidth), host=args.host)
     args.storage.mkdir(parents=True, exist_ok=True)
-    Device(settings, endpoint).run()
+    if args.stage is None:
+        return Device(settings, endpoint, **overrides)
+    from syncytium.live.pipeline import StageDevice  # it imports this module
+
+    return StageDevice(settings, endpoint, **overrides)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    """Run one device until the controller stops it."""
+    device_from_args(argv).run()
 
 
 if __name__ == "__main__":

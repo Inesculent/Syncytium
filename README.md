@@ -53,7 +53,8 @@ better with every member present, and heals.
   - [Hypothesis and goals](docs/hypothesis.md): H1–H6;
   - [swarm](docs/preregistration-swarm.md): H7–H17;
   - [escalation on disagreement](docs/preregistration-disagreement.md): H8b, H10b;
-  - [survival under device loss](docs/preregistration-survival.md): H12b.
+  - [survival under device loss](docs/preregistration-survival.md): H12b;
+  - [the swarm on real devices](docs/preregistration-demo.md): H18.
 - [Method](docs/method.md): quantization, rebuild, fusion, regrowth and the speed model.
 - [Plan](docs/plan.md): stages, risks and decisions.
 - [Running on a cluster](docs/cluster.md): SLURM setup, submission and results.
@@ -71,8 +72,8 @@ better with every member present, and heals.
    - Done: survival under device loss against replicated pipelines (H12b holds).
    - Next: correlated failures, and choosing fusion partners in larger swarms (H16).
 3. **Scale and systems.** Done: the post-trained series up to 27B (H17 fails: 2-bit children
-   are not usable alone at 27B). Next: a 3-bit swarm at 27B, real networks and devices,
-   instruction-tuned agents.
+   are not usable alone at 27B). Built: the swarm on real devices across two nodes (H18),
+   to run at 4B and then 9B. Next: a 3-bit swarm at 27B, instruction-tuned agents.
 
 ## Requirements
 

@@ -148,4 +148,48 @@ dominated by unpacking codes.
 
 ## Changes after fixing
 
-None yet.
+**2026-10-19, before any live run on any model: how the implementation reads the design.**
+These were settled while building the system and testing it on a tiny CPU model. No 4B or 9B
+data existed. None of them changes a threshold.
+- *The baseline runs after the swarm, not alongside it.* Each scenario is played against the
+  swarm and then against the baseline, on the same four GPUs, with the same storage layout,
+  requests and schedule. The baseline's E1 routes the forced request through device 2, a copy
+  of stage 1, which crashes after its 32nd answer token. The pipeline then retries the request
+  from the start through device 0. A request that arrives while a stage has no live copy is
+  logged as unanswered at once.
+- *New devices reuse freed GPUs.* The cluster's nodes have two GPUs each, so all four are in
+  use. A new device starts as a fresh process with an empty directory on the GPU its
+  destroyed predecessor left free.
+- *Two new devices regrow independently.* In B and C each new device fetches the survivors'
+  files, regrows every lost child, verifies them, and keeps only its own. The bytes moved are
+  reported per device, so they are twice the minimum.
+- *Choosing the regrowth data.* The controller tries neighbour bits first and the coded
+  residue next. It refuses neighbour bits with the same loss check that regrowth itself
+  applies, and logs each refusal; that log entry is the refusal check (c) asks for.
+- *What the emulated LAN delays.* It delays every message between devices: averaging,
+  pipeline hidden states and tokens, and file transfers. It does not delay messages to and
+  from the controller. A probe's averaged logits take about ten seconds to cross a 1 Gbit/s
+  link, and a heartbeat queued behind them would get a live device taken for dead. A
+  controller is not one of the devices whose network is being emulated. Every timeout between
+  devices also allows the time the emulated link needs to move that round's vectors through
+  the leader. Each device runs one token alone after loading, so start-up costs never fall
+  inside a timed or fused pass.
+- *Detection.* Devices send a heartbeat every 0.5 s, and one silent for 2 s is taken for dead.
+  Detection time runs from the kill command. For E1's victim, which crashes on its own, it runs
+  from the victim's last heartbeat. If the victim's answer ends before 32 tokens, the victim is
+  crashed right after and the log says so.
+- *Check (a).* The simulation's logits come from the parent's bf16 weights (the mean of the
+  four children) in the bf16 model, teacher-forced on the same token ids. Only P0's probe keeps
+  the last 16 positions' logits; later probes keep top-1 tokens and hashes, which is all (b)
+  needs.
+- *Check (f).* Peak memory is PyTorch's peak reserved memory per device process, which the cap
+  bounds; the CUDA context is not counted. A device process builds exactly one child or stage
+  from its own file, so "no more than one" holds by construction; the largest packed size
+  loaded is reported.
+- *Check (g).* The averaging rounds of the fused requests count, not the probes'. Each
+  request's first round is left out, because it also waits for every member to start. The
+  measured total time is compared with the model's prediction for the same rounds, each with
+  its own vector size and number of live members.
+- *Pipeline decoding.* Stage 1 drives greedy decoding. Each stage keeps its own cache, and
+  token positions are passed explicitly. On the tiny model, two stages give the whole 6-bit
+  model's logits and answers.

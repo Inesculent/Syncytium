@@ -1,0 +1,33 @@
+# H18 of docs/preregistration-demo.md: the swarm on real devices at 9B, the final runs. Four
+# device processes on two nodes (two H100s each, capped at 8 GB), scenarios A, B and C, each on
+# the cluster network and on an emulated LAN, against the replicated 6-bit pipeline on the
+# same GPUs. The children are Gate A's (3-bit, g = 64, N = 4, φ = ½, rotated with seed 0 and
+# scaled) with neighbour bits and a coded residue for t = 2. Submit with, for example:
+#   SCENARIO=A NETWORK=lan bash slurm/submit.sh configs/live-9b.toml --exclude=evc26
+# The first job writes the shards and the simulation reference; submit the others once its
+# log shows the scenario started.
+name = "live-9b"
+output = "results/live-9b"
+
+[model]
+path = "Qwen/Qwen3.5-9B-Base"
+
+[live]
+children = "shards/live-9b/children"
+baseline = "shards/live-9b/rtn6"
+storage = "/tmp/syncytium-live"
+bits = 3
+group_size = 64
+rotation_seed = 0
+baseline_bits = 6
+residue_losses = 2
+memory_gb = 8.0
+timeout = 5.0
+max_new_tokens = 256
+per_phase = 8
+probe_problems = 16
+die_after = 32
+
+[live.lan]
+latency = 0.0002
+bandwidth = 1e9

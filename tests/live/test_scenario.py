@@ -109,7 +109,7 @@ def test_scenario_a_survives_and_heals_exactly(swarm):
     assert controller.live() == [0, 1, 3]
 
     # E2: device 0 is destroyed, storage and all.
-    controller.kill(0, destroy=True)
+    controller.kill([0], destroy=True)
     assert controller.live() == [1, 3]
     assert not any(swarm.storage(0).iterdir())
     assert controller.serve("Q: 7 + 8?\nA:")["members"] == [1, 3]
@@ -137,8 +137,7 @@ def test_adjacent_losses_refuse_neighbour_bits_and_regrow_from_the_residue(swarm
     swarm.start(0, 1, 2, 3)
     controller.admit([0, 1, 2, 3])
     before = controller.probe(PROMPTS[:1])
-    for k in (0, 1):
-        controller.kill(k, destroy=True)
+    controller.kill([0, 1], destroy=True)
     assert controller.serve("Q: 1 + 2?\nA:")["members"] == [2, 3]
 
     swarm.start(0, 1)
@@ -153,7 +152,7 @@ def test_a_returning_device_with_a_wrong_shard_is_refused(swarm, reference):
     controller = swarm.controller
     swarm.start(0, 1, 2, 3)
     controller.admit([0, 1, 2, 3])
-    controller.kill(3)
+    controller.kill([3])
     path = swarm.storage(3) / shard_name(3)
     data = bytearray(path.read_bytes())
     data[-1] ^= 1

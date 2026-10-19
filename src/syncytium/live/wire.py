@@ -156,6 +156,8 @@ class Endpoint:
 
     def __init__(self, index: int, port: int = 0, link: Link | None = None, host: str = "") -> None:
         self.index, self.link = index, link or Link()
+        # Peers whose messages, both ways, skip the emulated link (the controller's).
+        self.direct: frozenset[int] = frozenset()
         self.inbox = Inbox()
         self._server = socket.create_server((host, port))
         # Keyed by address too: a device that restarts listens somewhere new.
@@ -175,11 +177,12 @@ class Endpoint:
     def send(self, peer: int, address: tuple[str, int], message: Message) -> bool:
         """Send ``message`` to ``peer``; ``False`` if it cannot be reached."""
         data = encode(message)
-        with self._link_lock:
-            start = max(time.monotonic(), self._sending_until)
-            self._sending_until = start + self.link.serialize(len(data))
-            done = self._sending_until
-        time.sleep(max(done - time.monotonic(), 0.0))
+        if peer not in self.direct:
+            with self._link_lock:
+                start = max(time.monotonic(), self._sending_until)
+                self._sending_until = start + self.link.serialize(len(data))
+                done = self._sending_until
+            time.sleep(max(done - time.monotonic(), 0.0))
         key = (peer, tuple(address))
         try:
             with self._lock:
@@ -224,6 +227,9 @@ class Endpoint:
                     return
                 if message is None:
                     return
+                if message.sender in self.direct:
+                    self.inbox.put(message)
+                    continue
                 with self._link_lock:
                     taken = self.link.serialize(message.size)
                     self._receiving_until = max(time.monotonic(), self._receiving_until + taken)

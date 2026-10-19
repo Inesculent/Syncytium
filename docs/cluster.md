@@ -76,6 +76,7 @@ says what the run tests:
 | `speed` | Drafting agreement for the speed model | H9 |
 | `confirm` | Escalation on disagreement, fresh problems | H8b, H10b |
 | `post` | Post-trained series | H17 |
+| `live` | The swarm on real devices, against the replicated pipeline | H18 |
 
 A new config takes an existing study prefix, or a new one added to this table, and opens
 with a comment whose first sentence names its hypothesis and what it measures.
@@ -89,6 +90,27 @@ with a comment whose first sentence names its hypothesis and what it measures.
   `slurm_logs/<submitted YYYYmmdd-HHMM>-<config>-<job id>.out` and `.err`, and every
   invocation records its job id and node in `results/<name>/runs.jsonl`. So a results
   directory leads straight to its log.
+
+## Live runs (H18)
+
+A config with a `[live]` table runs on **two nodes with two GPUs each** through
+`slurm/live.sbatch`. It plays one scenario on one network against the swarm and then the
+replicated pipeline, so submit one job per scenario and network:
+
+```bash
+SCENARIO=A NETWORK=cluster bash slurm/submit.sh configs/live-4b.toml --exclude=evc26
+```
+
+The log name gains the scenario and network (`...-live-4b-A-cluster-<job id>.out`). The first
+job writes the shard sets under `shards/live-<size>/` and the simulation reference, which takes
+one GPU for a while; submit the other jobs once its log shows the scenario has started, so two
+jobs never write the same shards. Each job ends by recomputing `results/<name>/checks.json`
+and the timeline figures from every run so far.
+
+Inside the job, the runner starts one host per node (`python -m syncytium.live.host`), and the
+hosts start each device as its own process on one GPU, with node-local storage under
+`/tmp/syncytium-live`. Every device's output goes to
+`results/<name>/<scenario>-<network>/<system>/devices/`.
 
 ## Monitoring and resuming
 

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from syncytium.live.run import NETWORKS, SCENARIOS, LiveConfig
 from syncytium.pool.conditions import plan as pool_plan
 from syncytium.pool.config import load_pool_config
 from syncytium.speed.config import load_speed_config
@@ -29,6 +30,7 @@ class Kind(StrEnum):
     POOL = "pool"
     SPEED = "speed"
     TASKS = "tasks"
+    LIVE = "live"
 
 
 class State(StrEnum):
@@ -83,6 +85,8 @@ def kind_of(path: Path) -> Kind:
         return Kind.SPEED
     if "setting" in raw:
         return Kind.TASKS
+    if "live" in raw:
+        return Kind.LIVE
     return Kind.SWEEP
 
 
@@ -94,6 +98,9 @@ def expected_rows(path: Path, kind: Kind) -> tuple[Path, int]:
     if kind == Kind.SPEED:
         speed = load_speed_config(path)
         return speed.output, speed.setting.children
+    if kind == Kind.LIVE:
+        # One row per scenario and network: both systems played it to the end.
+        return LiveConfig.load(path).output, len(SCENARIOS) * len(NETWORKS)
     if kind == Kind.TASKS:
         task = load_task_config(path)
         s = task.setting
@@ -122,8 +129,11 @@ def inspect(path: Path, root: Path) -> Run:
     kind = kind_of(path)
     output, expected = expected_rows(path, kind)
     directory = root / output
-    log = directory / (ACCEPTANCE if kind == Kind.SPEED else "results.jsonl")
-    logged = len({row["id"] for row in _rows(log)})
+    if kind == Kind.LIVE:
+        logged = len(_finished_live_runs(directory))
+    else:
+        log = directory / (ACCEPTANCE if kind == Kind.SPEED else "results.jsonl")
+        logged = len({row["id"] for row in _rows(log)})
     runs = _rows(directory / "runs.jsonl")
     last = runs[-1] if runs else {}
     commit = last.get("git_commit")
@@ -167,6 +177,12 @@ def table(runs: list[Run], strays: list[str]) -> str:
     if strays:
         lines += ["", "Results with no config: " + ", ".join(strays)]
     return "\n".join(lines)
+
+
+def _finished_live_runs(directory: Path) -> list[str]:
+    """Live runs whose baseline, played after the swarm, reached its end."""
+    logs = directory.glob("*/pipeline/events.jsonl")
+    return [p.parents[1].name for p in logs if any(r["event"] == "stopped" for r in _rows(p))]
 
 
 def _shorten(text: str, width: int) -> str:

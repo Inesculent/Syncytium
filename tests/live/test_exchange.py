@@ -157,3 +157,25 @@ def test_rounds_on_an_emulated_link_cost_what_the_model_says():
         e.close()
     predicted = leader_reduce_seconds(values, 4, Network(0.002, 1e8, 1e11))
     assert predicted / 2 < max(elapsed.values()) < predicted * 2
+
+
+def test_direct_peers_skip_the_emulated_link():
+    import time
+
+    slow = Link(latency=0.5, bandwidth=1e6)  # a 1 MB message takes 8 s
+    sender, receiver = (Endpoint(k, host="127.0.0.1", link=slow) for k in (1, 2))
+    sender.direct, receiver.direct = frozenset({2}), frozenset({1})  # each names the other
+    bulk = Message("bulk", 1, tensor=torch.zeros(500_000, dtype=torch.bfloat16))
+    address = ("127.0.0.1", receiver._server.getsockname()[1])
+    start = time.monotonic()
+    assert sender.send(2, address, bulk)
+    assert receiver.inbox.take(lambda m: m.kind == "bulk", 2) is not None
+    assert time.monotonic() - start < 2
+
+    # Without the exemption the same message waits for the link.
+    sender.direct = receiver.direct = frozenset()
+    thread = threading.Thread(target=sender.send, args=(2, address, bulk), daemon=True)
+    thread.start()
+    assert receiver.inbox.take(lambda m: m.kind == "bulk", 1) is None
+    for endpoint in (sender, receiver):
+        endpoint.close()

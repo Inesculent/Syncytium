@@ -10,7 +10,11 @@ When a layer's :attr:`PackedWeight.exchange` is set, its output is averaged with
 members' before anything reads it, which makes the group compute the fused model.
 """
 
+import copy
+import functools
+import re
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
 
@@ -20,7 +24,7 @@ from torch import Tensor, nn
 from torch.nn.functional import linear
 from transformers import AutoConfig, AutoModelForCausalLM, PretrainedConfig, PreTrainedModel
 
-from syncytium.models import quantized_weights
+from syncytium.models import quantized_weights, split_parameters
 from syncytium.quant import Grid, child_weights
 from syncytium.shards import MANIFEST_NAME, Manifest, read_scales, shard_name, verify_shard
 from syncytium.shards.manifest import SCALES_NAME, TensorSpec
@@ -29,6 +33,8 @@ from syncytium.shards.manifest import SCALES_NAME, TensorSpec
 BLOCK = 1 << 24
 
 Average = Callable[[Tensor], Tensor]
+
+_LAYER = re.compile(r"^(model\.layers\.)(\d+)(\..*)$")
 
 
 def unpack_fast(packed: Tensor, bits: int, start: int, count: int) -> Tensor:
@@ -162,6 +168,20 @@ class PackedEmbedding(nn.Module):
         return w.share(w.select(unique, self.dtype)[inverse])
 
 
+@dataclass(frozen=True)
+class Part:
+    """Which part of a model to build: child ``index``'s layers ``first`` to ``last``.
+
+    ``last`` of ``None`` means every layer. A part that stops before the last layer ends with
+    the hidden state (no final norm or head); one that starts after the first layer takes a
+    hidden state instead of tokens, and keeps the embedding only when the head is tied to it.
+    """
+
+    index: int
+    first: int = 0
+    last: int | None = None
+
+
 def load_member(
     directory: Path, index: int, device: str = "cuda", config: PretrainedConfig | None = None
 ) -> PreTrainedModel:
@@ -176,27 +196,43 @@ def load_member(
     path = directory / shard_name(index)
     verify_shard(path, manifest, index)
     scales = read_scales(directory / SCALES_NAME, manifest)
-    with torch.device("meta"):
-        model = AutoModelForCausalLM.from_config(
-            config or AutoConfig.from_pretrained(manifest.model)
-        )
+    return build_model(path, manifest, scales, Part(index), device, config)
+
+
+def build_model(
+    path: Path,
+    manifest: Manifest,
+    scales: Mapping[str, Tensor],
+    part: Part,
+    device: str = "cuda",
+    config: PretrainedConfig | None = None,
+) -> PreTrainedModel:
+    """Build ``part`` of a child's model from the tensors in ``path``, holding packed codes.
+
+    ``path`` needs only the tensors the part reads (see :func:`part_names`), under the full
+    model's names.
+    """
+    model = part_skeleton(config or AutoConfig.from_pretrained(manifest.model), part)
+    rename = functools.partial(global_name, first=part.first)
+    names = {rename(n) for n in quantized_weights(model)}
     with safe_open(str(path), "pt", device=device) as file:
         packed = {
             spec.name: PackedWeight(
                 spec,
                 {
-                    part: file.get_tensor(f"{spec.name}/{part}")
-                    for part in ("codes", "minimum", "step")
+                    piece: file.get_tensor(f"{spec.name}/{piece}")
+                    for piece in ("codes", "minimum", "step")
                 },
                 manifest,
-                index,
+                part.index,
                 scales.get(spec.name),
             )
             for spec in manifest.quantized()
+            if spec.name in names
         }
-        _swap_layers(model, packed)
+        _swap_layers(model, packed, rename)
         for name, _ in list(model.named_parameters()):
-            _set_parameter(model, name, file.get_tensor(name))
+            _set_parameter(model, name, file.get_tensor(rename(name)))
     _reset_rotary(model, device)
     dtype = next(model.parameters()).dtype
     for module in model.modules():
@@ -206,6 +242,47 @@ def load_member(
     if left:
         raise RuntimeError(f"tensors not loaded from the shard: {left[:5]}")
     return model.eval().requires_grad_(False)
+
+
+def part_skeleton(config: PretrainedConfig, part: Part) -> PreTrainedModel:
+    """The model of ``part`` on the meta device, its layers numbered from 0."""
+    total = config.num_hidden_layers
+    last = total if part.last is None else part.last
+    if (part.first, last) != (0, total):
+        config = copy.deepcopy(config)
+        config.layer_types = config.layer_types[part.first : last]
+        config.num_hidden_layers = last - part.first
+    with torch.device("meta"):
+        model = AutoModelForCausalLM.from_config(config)
+    if last < total:
+        model.model.norm = nn.Identity()
+        model.lm_head = nn.Identity()
+    if part.first > 0 and not config.tie_word_embeddings:
+        model.model.embed_tokens = nn.Identity()
+    return model
+
+
+def part_names(config: PretrainedConfig, manifest: Manifest, part: Part) -> list[str]:
+    """Names of every tensor in a shard that ``part`` reads, as stored in the shard."""
+    model = part_skeleton(config, part)
+    rename = functools.partial(global_name, first=part.first)
+    quantized = {rename(n) for n in quantized_weights(model)}
+    names = [
+        f"{spec.name}/{piece}"
+        for spec in manifest.quantized()
+        if spec.name in quantized
+        for piece in ("codes", "minimum", "step")
+    ]
+    _, full = split_parameters(model)
+    return names + [rename(n) for n in full]
+
+
+def global_name(name: str, first: int) -> str:
+    """The full model's name of a part's tensor ``name``, for a part starting at ``first``."""
+    match = _LAYER.match(name)
+    if match is None or not first:
+        return name
+    return f"{match[1]}{int(match[2]) + first}{match[3]}"
 
 
 def set_exchange(model: nn.Module, average: Average | None) -> None:
@@ -221,9 +298,11 @@ def packed_bytes(model: nn.Module) -> int:
     return sum(m.nbytes for m in weights.values())
 
 
-def _swap_layers(model: nn.Module, packed: Mapping[str, PackedWeight]) -> None:
+def _swap_layers(
+    model: nn.Module, packed: Mapping[str, PackedWeight], rename: Callable[[str], str]
+) -> None:
     """Replace every quantized linear and embedding with its packed version (shared if tied)."""
-    names = {id(w): name for name, w in quantized_weights(model).items()}
+    names = {id(w): rename(name) for name, w in quantized_weights(model).items()}
     for parent in list(model.modules()):
         for child_name, child in list(parent.named_children()):
             if not isinstance(child, (nn.Linear, nn.Embedding)) or id(child.weight) not in names:

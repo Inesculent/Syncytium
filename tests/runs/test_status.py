@@ -77,7 +77,29 @@ def test_purpose_is_the_first_sentence_of_the_opening_comment(root):
 def test_every_repository_config_is_recognized():
     configs = sorted((REPOSITORY / "configs").glob("*.toml"))
     kinds = {kind_of(path) for path in configs}
-    assert kinds == {Kind.SWEEP, Kind.POOL, Kind.SPEED, Kind.TASKS}
+    assert kinds == set(Kind)
     runs, _ = inventory(REPOSITORY)
     assert len(runs) == len(configs)
     assert all(run.expected > 0 and run.purpose for run in runs)
+
+
+LIVE = """# A live run. Scenarios on two networks.
+name = "demo"
+output = "results/demo"
+[model]
+path = "m"
+[live]
+children = "shards/c"
+baseline = "shards/b"
+storage = "/tmp/s"
+"""
+
+
+def test_a_live_run_counts_scenarios_whose_baseline_finished(root):
+    (root / "configs" / "demo.toml").write_text(LIVE, encoding="utf-8")
+    for name, events in (("A-lan", ["scenario", "stopped"]), ("B-lan", ["scenario"])):
+        log = root / "results" / "demo" / name / "pipeline" / "events.jsonl"
+        log.parent.mkdir(parents=True)
+        log.write_text("".join(json.dumps({"event": e}) + "\n" for e in events), "utf-8")
+    run = {r.name: r for r in inventory(root)[0]}["demo"]
+    assert (run.kind, run.expected, run.logged, run.state) == (Kind.LIVE, 6, 1, State.PARTIAL)
