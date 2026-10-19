@@ -48,6 +48,8 @@ class Exchange:
         self.timeout = timeout
         self.round = 0
         self.events: list[dict[str, Any]] = []
+        # One (values, live members, seconds) per round, for the communication check (g).
+        self.timing: list[tuple[int, int, float]] = []
         self._results: dict[int, Tensor] = {}
         self._buffer: dict[int, dict[int, Tensor]] = {}
 
@@ -60,8 +62,10 @@ class Exchange:
         """The mean of every live member's ``x`` for the next round, the same on every member."""
         self.round += 1
         r = self.round
+        start, live = time.monotonic(), len(self.members)
         local = x.detach().to("cpu")
         result = self._lead(r, local) if self.leader == self.me else self._follow(r, local)
+        self.timing.append((local.numel(), live, time.monotonic() - start))
         self._results[r] = result
         self._results.pop(r - 3, None)
         return result.to(x.device)

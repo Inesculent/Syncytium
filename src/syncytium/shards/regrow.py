@@ -315,6 +315,26 @@ def regrow_shards(directory: Path, lost: Collection[int], kind: Redundancy) -> l
     return paths
 
 
+def restore_regrowth_files(
+    directory: Path, holders: Collection[int], kind: Redundancy
+) -> list[Path]:
+    """Rebuild the ``kind`` regrowth files of ``holders`` once every shard is present again.
+
+    After regrowing with one kind of data, this restores the other kind for the regrown
+    members. Every shard is checked first, and each rebuilt file must match its sidecar hash.
+
+    Raises:
+        ShardError: If a shard does not match the manifest, or a rebuilt file its hash.
+    """
+    manifest = Manifest.load(directory / MANIFEST_NAME)
+    sidecar = _load_sidecar(directory, kind, manifest)
+    hashes = _write_regrowth_files(directory, manifest, kind, sidecar.tolerated, holders)
+    for index, digest in hashes.items():
+        if digest != sidecar.file_sha256[index]:
+            raise ShardError(f"rebuilt {regrowth_name(kind, index)} does not match the sidecar")
+    return [directory / regrowth_name(kind, index) for index in holders]
+
+
 @dataclass(frozen=True)
 class _OpenSet:
     """Open survivor files of a shard set, read one tensor at a time."""

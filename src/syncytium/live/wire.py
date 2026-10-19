@@ -158,7 +158,8 @@ class Endpoint:
         self.index, self.link = index, link or Link()
         self.inbox = Inbox()
         self._server = socket.create_server((host, port))
-        self._peers: dict[int, socket.socket] = {}
+        # Keyed by address too: a device that restarts listens somewhere new.
+        self._peers: dict[tuple[int, tuple[str, int]], socket.socket] = {}
         self._lock = threading.Lock()
         self._link_lock = threading.Lock()
         self._sending_until = self._receiving_until = 0.0
@@ -167,8 +168,9 @@ class Endpoint:
 
     @property
     def address(self) -> tuple[str, int]:
-        """The address peers connect to."""
-        return socket.gethostname(), self._server.getsockname()[1]
+        """The address peers connect to: the host name when listening on every interface."""
+        host, port = self._server.getsockname()[:2]
+        return (socket.gethostname() if host in ("0.0.0.0", "::") else host), port
 
     def send(self, peer: int, address: tuple[str, int], message: Message) -> bool:
         """Send ``message`` to ``peer``; ``False`` if it cannot be reached."""
@@ -178,14 +180,15 @@ class Endpoint:
             self._sending_until = start + self.link.serialize(len(data))
             done = self._sending_until
         time.sleep(max(done - time.monotonic(), 0.0))
+        key = (peer, tuple(address))
         try:
             with self._lock:
-                if peer not in self._peers:
-                    self._peers[peer] = socket.create_connection(address, timeout=5)
-                    self._peers[peer].settimeout(None)
-                self._peers[peer].sendall(data)
+                if key not in self._peers:
+                    self._peers[key] = socket.create_connection(address, timeout=5)
+                    self._peers[key].settimeout(None)
+                self._peers[key].sendall(data)
         except OSError:
-            self._forget(peer)
+            self._forget(key)
             return False
         return True
 
@@ -198,9 +201,9 @@ class Endpoint:
                 sock.close()
             self._peers.clear()
 
-    def _forget(self, peer: int) -> None:
+    def _forget(self, key: tuple[int, tuple[str, int]]) -> None:
         with self._lock:
-            sock = self._peers.pop(peer, None)
+            sock = self._peers.pop(key, None)
         if sock is not None:
             sock.close()
 

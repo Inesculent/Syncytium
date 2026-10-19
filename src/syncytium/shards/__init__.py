@@ -24,6 +24,7 @@ from syncytium.shards.regrow import (
     regrow_codes,
     regrow_shards,
     regrowth_data,
+    restore_regrowth_files,
     write_regrowth,
 )
 from syncytium.shards.writer import write_children
@@ -47,6 +48,7 @@ __all__ = [
     "regrow_codes",
     "regrow_shards",
     "regrowth_data",
+    "restore_regrowth_files",
     "shard_name",
     "unpack",
     "verify_shard",

@@ -58,12 +58,18 @@ class Completion:
 
 
 class _EntropyRecorder(LogitsProcessor):
-    """Records the entropy of every row's next-token distribution, leaving scores unchanged."""
+    """Records the entropy of every row's next-token distribution, leaving scores unchanged.
 
-    def __init__(self) -> None:
+    ``observer``, if given, is told how many answer tokens exist before each new one is chosen.
+    """
+
+    def __init__(self, observer: Callable[[int], None] | None = None) -> None:
         self.steps: list[Tensor] = []
+        self.observer = observer
 
     def __call__(self, input_ids: Tensor, scores: Tensor) -> Tensor:
+        if self.observer is not None:
+            self.observer(len(self.steps))
         logp = scores.float().log_softmax(dim=-1)
         self.steps.append(-(logp.exp() * logp).sum(dim=-1).cpu())
         return scores
@@ -88,10 +94,14 @@ def generate(
     tokenizer: Tokenizer,
     prompts: Sequence[Sequence[int]],
     decoding: Decoding,
+    observer: Callable[[int], None] | None = None,
 ) -> list[Completion]:
-    """Greedy answers to ``prompts`` (token ids), decoded together as one batch."""
+    """Greedy answers to ``prompts`` (token ids), decoded together as one batch.
+
+    ``observer`` is called before each answer token is chosen, with the number already chosen.
+    """
     ids, mask = _left_pad(prompts, _pad_id(tokenizer), _device(model))
-    recorder = _EntropyRecorder()
+    recorder = _EntropyRecorder(observer)
     stop = _StopOnText(tokenizer, [ids.shape[1]] * len(prompts), decoding.stops)
     out = _greedy(
         model,
@@ -210,4 +220,4 @@ def _pad_id(tokenizer: Tokenizer) -> int:
 
 
 def _device(model: PreTrainedModel) -> torch.device:
-    return model.get_output_embeddings().weight.device
+    return next(model.parameters()).device
