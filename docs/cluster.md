@@ -33,7 +33,8 @@ bash slurm/submit.sh configs/sweep-9b.toml --exclude=evc26 --time=48:00:00
 
 Anything after the config is passed to `sbatch`, so per-job overrides need no script edits.
 Exclude node `evc26`, which has been failing jobs. Node `evc33`, which other projects on this
-cluster used to exclude, was fixed by 2026-10-18.
+cluster used to exclude, was fixed by 2026-10-18. On 2026-10-20 node `evc47` failed a live
+job's check that both of its GPUs are usable, so live jobs exclude it too.
 
 Every kind of config goes through the same script, which picks the command from the
 config's tables:
@@ -98,7 +99,7 @@ A config with a `[live]` table runs on **two nodes with two GPUs each** through
 replicated pipeline, so submit one job per scenario and network:
 
 ```bash
-SCENARIO=A NETWORK=cluster bash slurm/submit.sh configs/live-4b.toml --exclude=evc26
+SCENARIO=A NETWORK=cluster bash slurm/submit.sh configs/live-4b.toml --exclude=evc26,evc47
 ```
 
 The log name gains the scenario and network (`...-live-4b-A-cluster-<job id>.out`). The first

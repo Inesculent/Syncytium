@@ -28,9 +28,17 @@ echo "scenario ${SCENARIO:-all}  network ${NETWORK:-all}"
 # part of its GPUs ("Unable to satisfy cpu bind request").
 ONE_GPU=(srun --nodes=1 --ntasks=1 --gres=gpu:1 --cpu-bind=none)
 "${ONE_GPU[@]}" nvidia-smi -L
-# Some nodes have failed CUDA initialization (error 101); stop here so the log names the node.
+# Some nodes have failed CUDA initialization (error 101); stop here so the log names the node,
+# what it sees, and CUDA's own error when it sees nothing.
 srun --nodes=2 --ntasks=2 --ntasks-per-node=1 --gres=gpu:2 --cpu-bind=none \
-    python -c "import torch; assert torch.cuda.device_count() == 2, 'CUDA unavailable on this node'"
+    bash -c 'nvidia-smi -L | sed "s/^/$(hostname): /"; python -c "
+import os, socket, torch
+node, count = socket.gethostname(), torch.cuda.device_count()
+print(node, \"CUDA_VISIBLE_DEVICES=\", os.environ.get(\"CUDA_VISIBLE_DEVICES\"), \"GPUs\", count)
+if count == 0:
+    torch.cuda.init()
+assert count == 2, f\"CUDA unavailable on this node: {node} sees {count} of 2 GPUs\"
+"'
 
 "${ONE_GPU[@]}" python -m syncytium.live.run prepare "${CONFIG}"
 "${ONE_GPU[@]}" python -m syncytium.live.run reference "${CONFIG}"
