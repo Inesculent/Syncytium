@@ -34,9 +34,11 @@ from syncytium.quant import Scheme
 from syncytium.shards import (
     MANIFEST_NAME,
     SCALES_NAME,
+    Manifest,
     Redundancy,
     ShardError,
     shard_name,
+    verify_shard,
     write_regrowth,
 )
 from syncytium.shards.calibration import shard_model
@@ -153,16 +155,36 @@ class LiveConfig:
 
 
 def prepare(config: LiveConfig, device: str = "cuda") -> None:
-    """Write the children with regrowth data, and the baseline's stages, unless present."""
-    if not (config.children / regrowth_manifest_name(Redundancy.RESIDUE)).exists():
+    """Write the children with regrowth data, and the baseline's stages.
+
+    Every step whose output is already complete is skipped, so an interrupted preparation
+    resumes where it stopped.
+    """
+    if not _written(config.children, DEVICES):
         scheme = Scheme(config.bits, config.group_size, DEVICES, 0.5, config.rotation_seed, True)
         shard_model(config.model, scheme, config.children, device)
+    if not (config.children / regrowth_manifest_name(Redundancy.NEIGHBOUR)).exists():
         write_regrowth(config.children, Redundancy.NEIGHBOUR)
+    if not (config.children / regrowth_manifest_name(Redundancy.RESIDUE)).exists():
         write_regrowth(config.children, Redundancy.RESIDUE, config.residue_losses)
-    if not (config.baseline / STAGES_NAME).exists():
+    if not _written(config.baseline, 1):
         rtn = Scheme(config.baseline_bits, config.group_size, 1, 0.5, config.rotation_seed, True)
         shard_model(config.model, rtn, config.baseline, device)
+    if not (config.baseline / STAGES_NAME).exists():
         write_stages(config.baseline, 2)
+
+
+def _written(directory: Path, children: int) -> bool:
+    """Whether a shard set with every child matching its manifest is in ``directory``."""
+    if not (directory / MANIFEST_NAME).exists():
+        return False
+    manifest = Manifest.load(directory / MANIFEST_NAME)
+    try:
+        for k in range(children):
+            verify_shard(directory / shard_name(k), manifest, k)
+    except (ShardError, FileNotFoundError):
+        return False
+    return True
 
 
 def problems(config: LiveConfig) -> tuple[list[gsm8k.Problem], list[gsm8k.Problem]]:

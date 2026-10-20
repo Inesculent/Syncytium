@@ -245,7 +245,11 @@ def build_model(
 
 
 def part_skeleton(config: PretrainedConfig, part: Part) -> PreTrainedModel:
-    """The model of ``part`` on the meta device, its layers numbered from 0."""
+    """The model of ``part`` on the meta device, its layers numbered from 0.
+
+    ``config`` may be a multimodal model's; its text model is built, as ``load_model`` does.
+    """
+    config = config.get_text_config()
     total = config.num_hidden_layers
     last = total if part.last is None else part.last
     if (part.first, last) != (0, total):

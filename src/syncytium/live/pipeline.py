@@ -82,9 +82,10 @@ def write_stages(
     if manifest.scheme.num_children != 1:
         raise ShardError("a pipeline is cut from a set with a single child")
     config = config or AutoConfig.from_pretrained(manifest.model)
+    layers = config.get_text_config().num_hidden_layers
     stages = []
     with safe_open(str(directory / child_name(0)), "pt") as file:
-        for s, (first, last) in enumerate(stage_bounds(config.num_hidden_layers, count)):
+        for s, (first, last) in enumerate(stage_bounds(layers, count)):
             names = part_names(config, manifest, Part(0, first, last))
             path = directory / stage_name(s)
             save_file({name: file.get_tensor(name) for name in names}, str(path))

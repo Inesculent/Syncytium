@@ -164,3 +164,13 @@ def test_the_pipeline_is_down_once_a_stage_has_no_copy(pipeline):
     report = controller.restore([0])["devices"][0]
     assert report["restored"] and report["matches"] and report["bytes"] > 0
     assert controller.up() and controller.serve(PROMPT)["route"] == "pipeline"
+
+
+def test_a_multimodal_config_is_read_through_its_text_model(tiny_config, reference):
+    # Hugging Face ids of Qwen3.5 load a multimodal config; the layers live in its text part.
+    from transformers.models.qwen3_5 import Qwen3_5Config
+
+    composite = Qwen3_5Config(text_config=tiny_config.to_dict())
+    stages = write_stages(reference, 2, composite)
+    assert [(s.first, s.last) for s in stages] == [(0, 2), (2, 4)]
+    assert load_stage(reference, 1, "cpu", composite).config.num_hidden_layers == 2
