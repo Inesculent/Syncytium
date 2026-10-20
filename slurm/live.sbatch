@@ -24,10 +24,12 @@ export PYTHONUNBUFFERED=1
 
 echo "commit $(git rev-parse --short HEAD)  nodes ${SLURM_JOB_NODELIST}  config ${CONFIG}"
 echo "scenario ${SCENARIO:-all}  network ${NETWORK:-all}"
-ONE_GPU=(srun --nodes=1 --ntasks=1 --gres=gpu:1)
+# Steps take no CPU binding: on some nodes the job's binding does not fit a step that holds
+# part of its GPUs ("Unable to satisfy cpu bind request").
+ONE_GPU=(srun --nodes=1 --ntasks=1 --gres=gpu:1 --cpu-bind=none)
 "${ONE_GPU[@]}" nvidia-smi -L
 # Some nodes have failed CUDA initialization (error 101); stop here so the log names the node.
-srun --nodes=2 --ntasks=2 --ntasks-per-node=1 --gres=gpu:2 \
+srun --nodes=2 --ntasks=2 --ntasks-per-node=1 --gres=gpu:2 --cpu-bind=none \
     python -c "import torch; assert torch.cuda.device_count() == 2, 'CUDA unavailable on this node'"
 
 "${ONE_GPU[@]}" python -m syncytium.live.run prepare "${CONFIG}"

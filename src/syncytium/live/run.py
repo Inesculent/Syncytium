@@ -413,7 +413,7 @@ def run(config: LiveConfig, scenario: str, network: str, nodes: int = 2) -> None
     endpoint = Endpoint(RUNNER)
     host, port = endpoint.address
     launch = ["srun", f"--nodes={nodes}", f"--ntasks={nodes}", "--ntasks-per-node=1"]
-    launch += [f"--gres=gpu:{DEVICES // nodes}", "--kill-on-bad-exit=0"]
+    launch += [f"--gres=gpu:{DEVICES // nodes}", "--cpu-bind=none", "--kill-on-bad-exit=0"]
     launch += [sys.executable, "-m", "syncytium.live.host", "--runner", f"{host}:{port}"]
     process = subprocess.Popen(launch)
     try:
