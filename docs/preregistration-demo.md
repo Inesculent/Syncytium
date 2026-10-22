@@ -193,3 +193,23 @@ data existed. None of them changes a threshold.
 - *Pipeline decoding.* Stage 1 drives greedy decoding. Each stage keeps its own cache, and
   token positions are passed explicitly. On the tiny model, two stages give the whole 6-bit
   model's logits and answers.
+
+**2026-10-21, after the first 4B development run: how a group treats a slow member.** The
+first 4B run of scenario A on the cluster network stopped during P0's probe, before any
+request was served. Development runs are not results, and nothing here changes a threshold.
+- *What happened.* Every averaging round of a request was numbered from 1 again, and a leader
+  that gave up on a member did not tell it. A member still alive kept waiting, took the leader
+  for dead and tried to lead itself, and a contribution it sent late was taken, in a later
+  probe prompt, for that prompt's own. Every device then failed.
+- *Messages belong to one request.* Every averaging message carries its request's tag, and
+  messages from earlier requests are discarded.
+- *A dropped member leaves.* A member the leader drops while it is still alive receives the
+  round's result without itself among the members. It stops taking part in that request and
+  answers the controller for itself only, and the group's answer comes from the rest. Such
+  drops are logged.
+- *Waits allow for the real network.* A probe averages the logits at every position, about
+  0.4 GB per member per prompt for the 4B model. On top of the emulated link, every wait now
+  allows for the real network moving the round's vectors through the leader at 1 Gbit/s or
+  faster. Before, it allowed nothing on the cluster network.
+- *Checks (a) and (b) need the full group.* A probe reports whether every prompt finished with
+  every member it started with, and (a) and (b) fail if it did not.

@@ -53,7 +53,14 @@ def read_events(path: Path) -> list[dict[str, Any]]:
 
 
 def check_exact(probe: dict[str, Any], reference: dict[str, Any]) -> dict[str, Any]:
-    """Check (a): top-1 agreement of the live probe with the simulation, and logit gaps."""
+    """Check (a): top-1 agreement of the live probe with the simulation, and logit gaps.
+
+    The probe must have run every prompt through the full group: a prompt that finished with
+    fewer members (some were dropped) is not the parent's computation.
+    """
+    complete = probe.get("complete", True)
+    if not complete:
+        return {"passed": False, "complete": False}
     same = total = 0
     gaps = []
     for live, simulated in zip(probe["prompts"], reference["prompts"], strict=True):
@@ -65,6 +72,7 @@ def check_exact(probe: dict[str, Any], reference: dict[str, Any]) -> dict[str, A
     agreement = same / total
     return {
         "passed": agreement >= AGREEMENT,
+        "complete": True,
         "agreement": agreement,
         "max_logit_gap": float(gap.max()),
         "mean_logit_gap": float(gap.mean()),
@@ -75,7 +83,13 @@ def check_recovery(first: dict[str, Any], last: dict[str, Any]) -> dict[str, Any
     """Check (b): the probe after recovery is bit-identical to the first."""
     same = first["sha256"] == last["sha256"] and first["members"] == last["members"]
     consistent = first["consistent"] and last["consistent"]
-    return {"passed": same and consistent, "first": first["sha256"], "last": last["sha256"]}
+    complete = first.get("complete", True) and last.get("complete", True)
+    return {
+        "passed": same and consistent and complete,
+        "complete": complete,
+        "first": first["sha256"],
+        "last": last["sha256"],
+    }
 
 
 def check_healing(events: Sequence[dict[str, Any]], scenario: str) -> dict[str, Any]:

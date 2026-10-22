@@ -23,7 +23,7 @@ from typing import Any
 import torch
 from transformers import AutoTokenizer, PretrainedConfig
 
-from syncytium.live.exchange import Exchange
+from syncytium.live.exchange import DroppedError, Exchange
 from syncytium.live.packed import load_member, packed_bytes, set_exchange
 from syncytium.live.wire import Endpoint, Link, Message
 from syncytium.shards import (
@@ -183,6 +183,8 @@ class Device:
         set_exchange(self.model, exchange.average)
         try:
             completion = self._answer(command.info, observe if die_after is not None else None)
+        except DroppedError:  # the leader went on without it; its answer is not the group's
+            completion = None
         finally:
             set_exchange(self.model, None)
         self._reply_answer(command, completion, start, exchange)
@@ -195,6 +197,10 @@ class Device:
             ids = torch.tensor([command.info["prompt"]], device=self.settings.device)
             with torch.no_grad():
                 logits = self.model(input_ids=ids).logits[0]
+        except DroppedError:
+            info = {"request": command.info["request"], "dropped": True, "events": exchange.events}
+            self._tell("probe", info)
+            return
         finally:
             set_exchange(self.model, None)
         raw = logits.detach().contiguous().cpu()
@@ -204,6 +210,7 @@ class Device:
             "top1": raw.argmax(dim=-1).tolist(),
             "sha256": digest,
             "members": exchange.members,
+            "events": exchange.events,
             "timing": summarize_timing(exchange.timing),
         }
         self._tell("probe", info, raw[-PROBE_TAIL:].float())
@@ -301,17 +308,19 @@ class Device:
 
     def _exchange(self, info: dict[str, Any]) -> Exchange:
         addresses = {int(m): tuple(a) for m, a in info["addresses"].items()}
-        return Exchange(self.endpoint, addresses, info["members"], self.settings.timeout)
+        members, timeout = info["members"], self.settings.timeout
+        return Exchange(self.endpoint, addresses, members, timeout, info["request"])
 
     def _reply_answer(
         self, command: Message, completion: Any, start: float, exchange: Exchange | None
     ) -> None:
         info = {
             "request": command.info["request"],
-            "text": completion.text,
-            "tokens": len(completion.tokens),
+            "text": None if completion is None else completion.text,
+            "tokens": 0 if completion is None else len(completion.tokens),
             "seconds": time.monotonic() - start,
             "peak": self._peak(),
+            "dropped": completion is None,
         }
         if exchange is not None:
             info |= {"members": exchange.members, "events": exchange.events}

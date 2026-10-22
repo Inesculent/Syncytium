@@ -1,12 +1,14 @@
 import json
 import shutil
 import threading
+import time
 
 import pytest
 import torch
 
 from syncytium.live.controller import Controller
 from syncytium.live.device import CONTROLLER, CrashedError, Device, DeviceSettings
+from syncytium.live.exchange import Exchange
 from syncytium.live.wire import Endpoint
 from syncytium.models import split_parameters
 from syncytium.quant import Scheme
@@ -130,6 +132,28 @@ def test_scenario_a_survives_and_heals_exactly(swarm):
     after = controller.probe(PROMPTS)
     assert after["members"] == [0, 1, 2, 3]
     assert after["sha256"] == before["sha256"]
+
+
+def test_a_probe_survives_members_too_slow_for_the_leader(swarm, monkeypatch):
+    # A network slower than the waits allow for: devices 2 and 3 send the logits late, so the
+    # leader drops them. They leave that prompt only, and nothing they sent late reaches the
+    # next prompt, which is a different length.
+    send = Exchange._send
+
+    def late(self, member, message):
+        logits = message.tensor is not None and message.tensor.shape[-1] == swarm.config.vocab_size
+        if self.me in (2, 3) and message.kind == "contrib" and logits:
+            time.sleep(1.5)
+        return send(self, member, message)
+
+    monkeypatch.setattr(Exchange, "_send", late)
+    swarm.start(0, 1, 2, 3)
+    swarm.controller.admit([0, 1, 2, 3])
+    result = swarm.controller.probe(PROMPTS)
+    assert not result["complete"] and [p["members"] for p in result["prompts"]] == [[0, 1]] * 2
+    assert swarm.controller.live() == [0, 1, 2, 3]
+    left = [(e["prompt"], e["member"]) for e in swarm.events() if e["event"] == "probe-left"]
+    assert sorted(left) == [(0, 2), (0, 3), (1, 2), (1, 3)]
 
 
 def test_adjacent_losses_refuse_neighbour_bits_and_regrow_from_the_residue(swarm):

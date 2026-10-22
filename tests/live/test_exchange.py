@@ -1,9 +1,10 @@
 import threading
+import time
 
 import pytest
 import torch
 
-from syncytium.live.exchange import Exchange, mean_in_order
+from syncytium.live.exchange import DroppedError, Exchange, mean_in_order
 from syncytium.live.wire import Endpoint, Link, Message, decode, encode
 
 TIMEOUT = 0.4
@@ -90,7 +91,7 @@ class LeaderDiesMidBroadcast(Exchange):
     def _broadcast(self, r, result, targets):
         if self.me == 0 and r == 3:
             message = Message("result", self.me, r, {"members": self.members}, result)
-            self.endpoint.send(1, self.addresses[1], message)
+            self._send(1, message)
             raise CrashError
         super()._broadcast(r, result, targets)
 
@@ -101,6 +102,60 @@ def test_a_leader_dying_mid_broadcast_leaves_every_member_with_the_same_result()
     # Member 1 already had round 3's result, which included the old leader; everyone adopts it.
     assert torch.equal(results[2][3], mean_in_order({m: value(m, 3) for m in range(4)}))
     assert torch.equal(results[2][4], mean_in_order({m: value(m, 4) for m in (1, 2, 3)}))
+
+
+def test_a_new_leader_can_take_over_in_the_first_round():
+    results, exchanges = run([0, 1, 2, 3], crash={0: 1})
+    assert_consistent(results, [1, 2, 3])
+    assert torch.equal(results[1][1], mean_in_order({m: value(m, 1) for m in (1, 2, 3)}))
+    assert exchanges[1].members == [1, 2, 3]
+
+
+class SlowMember(Exchange):
+    """Member 3 sends round 2's contribution to the first request after the leader gave up."""
+
+    def _send(self, member, message):
+        if (self.me, self.tag, message.kind, message.round) == (3, 0, "contrib", 2):
+            time.sleep(1.5 * TIMEOUT)
+        return super()._send(member, message)
+
+
+def two_requests(m, endpoint, addresses, members, results, left):
+    """Member ``m``'s part in a request where member 3 is late, then in the next request."""
+    first = SlowMember(endpoint, addresses, members, TIMEOUT, tag=0)
+    try:
+        for r in (1, 2, 3):
+            first.average(value(m, r))
+    except DroppedError:
+        left[m] = first.events
+    # The next request starts with everyone. Member 3's late message from the first one has
+    # the same round number, but must not be taken for its contribution to this one.
+    second = Exchange(endpoint, addresses, members, TIMEOUT, tag=1)
+    for r in range(1, ROUNDS + 1):
+        results[m][r] = second.average(value(m, r) + 100)
+
+
+def test_a_late_member_is_dropped_leaves_and_cannot_touch_the_next_request():
+    members = [0, 1, 2, 3]
+    endpoints = {m: Endpoint(m, host="127.0.0.1") for m in members}
+    addresses = {m: ("127.0.0.1", e._server.getsockname()[1]) for m, e in endpoints.items()}
+    results, left = {m: {} for m in members}, {}
+    threads = [
+        threading.Thread(
+            target=two_requests, args=(m, endpoints[m], addresses, members, results, left)
+        )
+        for m in members
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+    for e in endpoints.values():
+        e.close()
+    assert list(left) == [3] and left[3][-1]["event"] == "left"
+    assert_consistent(results, members)
+    for r in range(1, ROUNDS + 1):
+        assert torch.equal(results[3][r], mean_in_order({m: value(m, r) + 100 for m in members}))
 
 
 @pytest.mark.parametrize(
@@ -126,8 +181,6 @@ def test_an_emulated_link_serializes_each_end_and_adds_latency_once():
 
 
 def test_rounds_on_an_emulated_link_cost_what_the_model_says():
-    import time
-
     from syncytium.speed.network import Network, leader_reduce_seconds
 
     link = Link(latency=0.002, bandwidth=1e8)
@@ -160,8 +213,6 @@ def test_rounds_on_an_emulated_link_cost_what_the_model_says():
 
 
 def test_direct_peers_skip_the_emulated_link():
-    import time
-
     slow = Link(latency=0.5, bandwidth=1e6)  # a 1 MB message takes 8 s
     sender, receiver = (Endpoint(k, host="127.0.0.1", link=slow) for k in (1, 2))
     sender.direct, receiver.direct = frozenset({2}), frozenset({1})  # each names the other

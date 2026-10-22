@@ -87,23 +87,42 @@ class Controller(Control):
     def probe(self, prompts: Sequence[str]) -> dict[str, Any]:
         """Teacher-force ``prompts`` through every live member together.
 
-        Returns the members, the SHA-256 over every prompt's logits, whether every member
-        computed the same logits, and per prompt the top-1 tokens and the last positions'
-        logits.
+        Returns the members at the start, the SHA-256 over every prompt's logits, whether every
+        member computed the same logits, whether every prompt finished with every starting
+        member, and per prompt the top-1 tokens, the last positions' logits and the members
+        that finished it. A member dropped from the group leaves only that prompt.
         """
-        live, results, consistent = self.live(), [], True
-        for prompt in prompts:
+        start, results, consistent = self.live(), [], True
+        for k, prompt in enumerate(prompts):
+            live = self.live()
             info = self._request_info(self.tokenizer.encode(prompt), live)
             request = self._send_all(live, "probe", info)
             replies = self._collect(request, live, "probe")
-            consistent &= len({r.info["sha256"] for r in replies.values()}) == 1
-            first = replies[min(replies)]
+            for m, reply in replies.items():
+                for event in reply.info["events"]:
+                    fields = {"round": event["round"], "member": event["member"], "by": m}
+                    self.log("probe-" + event["event"], prompt=k, **fields)
+            finished = {m: r for m, r in replies.items() if not r.info.get("dropped")}
+            consistent &= len({r.info["sha256"] for r in finished.values()}) == 1
+            first = finished[min(finished)].info if finished else {"top1": [], "sha256": ""}
             results.append(
-                {"top1": first.info["top1"], "sha256": first.info["sha256"], "tail": first.tensor}
+                {
+                    "top1": first["top1"],
+                    "sha256": first["sha256"],
+                    "tail": finished[min(finished)].tensor if finished else None,
+                    "members": first.get("members", []),
+                }
             )
         digest = hashlib.sha256("".join(r["sha256"] for r in results).encode()).hexdigest()
-        self.log("probe", members=live, sha256=digest, consistent=consistent)
-        return {"members": live, "sha256": digest, "consistent": consistent, "prompts": results}
+        complete = all(r["members"] == start for r in results)
+        self.log("probe", members=start, sha256=digest, consistent=consistent, complete=complete)
+        return {
+            "members": start,
+            "sha256": digest,
+            "consistent": consistent,
+            "complete": complete,
+            "prompts": results,
+        }
 
     def regrow(self, lost: Sequence[int]) -> dict[str, Any]:
         """Regrow the children of ``lost`` on the new devices registered under their indices.
@@ -171,6 +190,8 @@ class Controller(Control):
             extra = {"die_after": force["die_after"]} if force and force["victim"] == k else {}
             self._command(k, kind, info | extra, request)
         answers = self._collect(request, members, "answer")
+        # A member the group dropped answers for itself only; the group's answer is the rest's.
+        answers = {k: a for k, a in answers.items() if not a.info.get("dropped")}
         if not answers:
             return None
         return _record(route, members, answers[min(answers)].info)

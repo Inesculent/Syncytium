@@ -123,6 +123,14 @@ class Inbox:
             self._messages.append(message)
             self._changed.notify_all()
 
+    def discard(self, match: Callable[[Message], bool]) -> int:
+        """Remove every message ``match`` accepts, delivered or not; return how many."""
+        with self._changed:
+            kept = [m for m in self._messages if not match(m)]
+            removed = len(self._messages) - len(kept)
+            self._messages = kept
+        return removed
+
     def take(self, match: Callable[[Message], bool], timeout: float) -> Message | None:
         """Remove and return the first delivered message ``match`` accepts; ``None`` on timeout.
 
