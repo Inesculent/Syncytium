@@ -20,6 +20,7 @@ from typing import Any
 from syncytium.live.wire import Endpoint, Message
 
 RUNNER = 98  # the scenario runner's index on the wire
+IDLE = 60.0  # seconds between checks that the runner is still there
 
 
 class Host:
@@ -37,12 +38,20 @@ class Host:
         self.processes: list[subprocess.Popen[bytes]] = []
 
     def run(self) -> None:
-        """Register, then obey the runner until told to stop."""
+        """Register, then obey the runner until told to stop or the runner is gone.
+
+        A scenario can leave its hosts idle for hours between steps, so silence alone never
+        stops a host; ending the host ends the devices it started.
+        """
         info = {"address": list(self.endpoint.address), "node": socket.gethostname()}
         self._tell("host-hello", info | {"gpus": self.gpus})
         while True:
-            command = self.endpoint.inbox.take(lambda m: m.sender == RUNNER, 3600)
-            if command is None or command.kind == "stop":
+            command = self.endpoint.inbox.take(lambda m: m.sender == RUNNER, IDLE)
+            if command is None:
+                if self._runner_alive():
+                    continue
+                break
+            if command.kind == "stop":
                 break
             reply = {"provision": _provision, "spawn": self._spawn, "clear": _clear}[command.kind](
                 command.info
@@ -61,6 +70,14 @@ class Host:
             process = subprocess.Popen(info["argv"], env=env, stdout=log, stderr=subprocess.STDOUT)
         self.processes.append(process)
         return {"pid": process.pid, "started": time.time()}
+
+    def _runner_alive(self) -> bool:
+        """Whether the runner still accepts connections."""
+        try:
+            socket.create_connection(self.runner, timeout=5).close()
+        except OSError:
+            return False
+        return True
 
     def _tell(self, kind: str, info: dict[str, Any]) -> None:
         self.endpoint.send(RUNNER, self.runner, Message(kind, self.index, info=info))

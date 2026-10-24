@@ -20,14 +20,17 @@ def value(member, r):
     return torch.full((3,), float(10 * member + r), dtype=torch.bfloat16)
 
 
-def run(members, crash=None, exchange_type=Exchange):
+def run(members, crash=None, exchange_type=Exchange, down=()):
     """Run ``ROUNDS`` rounds on every member in its own thread; return each member's results.
 
-    ``crash`` maps a member to the round at whose start it dies without contributing.
+    ``crash`` maps a member to the round at whose start it dies without contributing. Members
+    in ``down`` are dead before anyone starts: every message to them is refused.
     """
     crash = crash or {}
     endpoints = {m: Endpoint(m, host="127.0.0.1") for m in members}
     addresses = {m: ("127.0.0.1", e._server.getsockname()[1]) for m, e in endpoints.items()}
+    for m in down:
+        endpoints[m].close()
     results = {m: {} for m in members}
     exchanges = {}
 
@@ -42,14 +45,19 @@ def run(members, crash=None, exchange_type=Exchange):
         except CrashError:
             endpoints[m].close()
 
-    threads = [threading.Thread(target=member, args=(m,)) for m in members]
+    in_threads(member, [m for m in members if m not in down])
+    for e in endpoints.values():
+        e.close()
+    return results, exchanges
+
+
+def in_threads(target, members):
+    """Run ``target(m)`` for every member in its own thread, and wait for them all."""
+    threads = [threading.Thread(target=target, args=(m,)) for m in members]
     for t in threads:
         t.start()
     for t in threads:
         t.join(timeout=30)
-    for e in endpoints.values():
-        e.close()
-    return results, exchanges
 
 
 def assert_consistent(results, survivors):
@@ -113,18 +121,18 @@ def test_a_new_leader_can_take_over_in_the_first_round():
 
 
 class SlowState(Exchange):
-    """Members contribute once the leader is surely down; member 2 sends its state late."""
+    """Member 2 sends its state late."""
 
     def _send(self, member, message):
-        if message.kind == "contrib" and message.round == 1:
-            time.sleep(0.2)  # member 0 crashes at once, so every contribution is refused
         if self.me == 2 and message.kind == "state":
             time.sleep(1.5 * self._patience)  # later than one patience after the takeover
         return super()._send(member, message)
 
 
 def test_a_new_leader_waits_for_a_member_slow_to_send_its_state():
-    results, exchanges = run([0, 1, 2, 3], crash={0: 1}, exchange_type=SlowState)
+    # Member 0 is down before round 1, so every member takes it for dead at once; member 2's
+    # state then arrives after one patience, which the old collection did not wait for.
+    results, exchanges = run([0, 1, 2, 3], exchange_type=SlowState, down=[0])
     assert_consistent(results, [1, 2, 3])
     assert torch.equal(results[2][1], mean_in_order({m: value(m, 1) for m in (1, 2, 3)}))
     assert exchanges[2].members == [1, 2, 3]

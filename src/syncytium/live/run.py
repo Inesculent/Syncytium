@@ -52,6 +52,7 @@ SYSTEMS = ("swarm", "pipeline")
 NETWORKS = ("cluster", "lan")
 VICTIM_WAIT = 60.0  # seconds to wait for E1's victim to be found dead after its request
 REFERENCE_NAME = "reference.pt"  # the simulation's probe logits, for check (a)
+REPLACED = "replaced"  # where earlier attempts at a run are kept
 
 # Each step: (label, action, devices). The labels are the pre-registration's.
 SCENARIOS: dict[str, tuple[tuple[str, str, tuple[int, ...]], ...]] = {
@@ -238,7 +239,9 @@ class Hosts:
         self._requests += 1
         request = self._requests
         address = tuple(self.hosts[index]["address"])
-        self.endpoint.send(index, address, Message(kind, RUNNER, info=info | {"request": request}))
+        message = Message(kind, RUNNER, info=info | {"request": request})
+        if not self.endpoint.send(index, address, message):
+            raise RuntimeError(f"host {index} cannot be reached; its job step may have ended")
         reply = self.endpoint.inbox.take(
             lambda m: m.kind == "done" and m.info["request"] == request, 3600
         )
@@ -433,16 +436,31 @@ def run(config: LiveConfig, scenario: str, network: str, nodes: int = 2) -> None
     launch = ["srun", f"--nodes={nodes}", f"--ntasks={nodes}", "--ntasks-per-node=1"]
     launch += [f"--gres=gpu:{DEVICES // nodes}", "--cpu-bind=none", "--kill-on-bad-exit=0"]
     launch += [sys.executable, "-m", "syncytium.live.host", "--runner", f"{host}:{port}"]
+    directory = config.output / f"{scenario}-{network}"
+    set_aside(directory)
     process = subprocess.Popen(launch)
     try:
         hosts = Hosts(endpoint, nodes)
         for system in SYSTEMS:
-            out = config.output / f"{scenario}-{network}" / system
+            out = directory / system
             Scenario(config, hosts, system, (scenario, network), out).play()
         hosts.stop()
     finally:
         process.wait(timeout=120)
         endpoint.close()
+
+
+def set_aside(directory: Path) -> Path | None:
+    """Move an earlier attempt at a run out of the way, so a rerun starts afresh.
+
+    It goes to ``replaced/`` next to it, kept but outside the checks, which read only the
+    directories of runs. Returns where it went, if there was one.
+    """
+    if not directory.exists():
+        return None
+    target = directory.parent / REPLACED / f"{directory.name}-{time.strftime('%Y%m%d-%H%M%S')}"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return directory.rename(target)
 
 
 def main(argv: Sequence[str] | None = None) -> None:

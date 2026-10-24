@@ -246,3 +246,11 @@ threshold changes.
 - *Old sets are replaced.* `prepare` rewrites any set whose manifest has another scheme. It
   also removes everything made from the old set: the regrowth data, the stage index and the
   simulation reference.
+
+**2026-10-24, after the third 4B development run: the hosts outlive idle periods.** With
+float32 grids, scenario A served correct answers through E2. The P0 probe was complete and
+consistent, and E1's fused answer finished without its victim. Then each node's host, which
+starts the device processes, stopped after an hour without a command, and its devices went
+with it. Hosts now run until the runner is gone. A runner that cannot reach a host stops with
+an error instead of waiting. A rerun of a scenario sets the earlier attempt aside under
+`replaced/`, out of the checks. No threshold changes.

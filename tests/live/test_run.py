@@ -150,3 +150,13 @@ def test_a_set_written_with_another_scheme_is_written_again(tiny_model, tmp_path
     assert run._written(tmp_path, scheme)
     assert not run._written(tmp_path, dataclasses.replace(scheme, grid_storage="float16"))
     assert not run._written(tmp_path / "missing", scheme)
+
+
+def test_a_rerun_sets_the_earlier_attempt_aside(tmp_path):
+    earlier = tmp_path / "A-cluster"
+    (earlier / "swarm").mkdir(parents=True)
+    (earlier / "swarm" / "events.jsonl").write_text("{}\n")
+    assert run.set_aside(tmp_path / "B-lan") is None
+    moved = run.set_aside(earlier)
+    assert not earlier.exists() and moved.parent == tmp_path / run.REPLACED
+    assert (moved / "swarm" / "events.jsonl").read_text() == "{}\n"

@@ -40,7 +40,7 @@ def write_reference(config: LiveConfig, device: str = "cuda") -> Path:
         ids = torch.tensor([tokenizer.encode(gsm8k.prompt(problem.question))], device=device)
         with torch.no_grad():
             logits = model(input_ids=ids).logits[0].float().cpu()
-        prompts.append({"top1": logits.argmax(dim=-1).tolist(), "tail": logits[-TAIL:]})
+        prompts.append({"top1": logits.argmax(dim=-1).tolist(), "tail": logits[-TAIL:].clone()})
     path = config.output / REFERENCE_NAME
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"prompts": prompts}, path)
