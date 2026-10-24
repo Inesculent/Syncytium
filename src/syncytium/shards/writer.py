@@ -1,7 +1,8 @@
 """Writing a model as N child shards plus a manifest.
 
 Each shard is a safetensors file holding, for every quantized tensor, its packed codes and
-the shared per-group minimum and step in fp16, plus every unquantized tensor unchanged. A set
+the shared per-group minimum and step (in fp16, or fp32 if the scheme says so), plus every
+unquantized tensor unchanged. A set
 with channel scaling also writes the scales once, in fp32, to a file next to the shards
 (``docs/method.md``, "Optional channel scaling"); every child uses the same scales.
 """
@@ -27,8 +28,6 @@ from syncytium.shards.manifest import (
 )
 from syncytium.shards.packing import pack
 
-SCALE_DTYPE = torch.float16
-
 
 def write_children(
     quantized: Mapping[str, Tensor],
@@ -53,16 +52,19 @@ def write_children(
     Raises:
         ValueError: If ``scales`` is missing for a scaled scheme, given for an unscaled one,
             or names an unknown weight or a vector that is not one positive finite scale per
-            input channel.
+            input channel; or if a weight's grid does not fit the scheme's grid storage.
     """
     scales = _checked_scales(quantized, scheme, scales)
     directory.mkdir(parents=True, exist_ok=True)
     children: list[dict[str, Tensor]] = [{} for _ in range(scheme.num_children)]
+    storage = getattr(torch, scheme.grid_storage)
     parent_hash = hashlib.sha256()
     for name, weight in quantized.items():
         grid, codes = quantize_tensor(weight, scheme, scales.get(name))
+        if not (grid.minimum.isfinite().all() and grid.step.isfinite().all()):
+            raise ValueError(f"the grid of {name} overflows {scheme.grid_storage}; store float32")
         for child, child_codes in zip(children, codes, strict=True):
-            child |= _encode(name, child_codes, grid)
+            child |= _encode(name, child_codes, grid, storage)
         update_parent_hash(parent_hash, name, parent_codes(codes), scales.get(name))
     shared = {name: t.detach().cpu().contiguous() for name, t in full_precision.items()}
     hashes = tuple(
@@ -88,7 +90,7 @@ def write_children(
 def quantize_tensor(
     weight: Tensor, scheme: Scheme, scales: Tensor | None = None
 ) -> tuple[Grid, list[Tensor]]:
-    """Grid (exact in fp16) and every child's codes for one weight, in grouped shape.
+    """Grid (exact in the scheme's grid storage) and every child's codes for one weight.
 
     Like :func:`~syncytium.quant.simulate_child`, the weight is multiplied by ``scales`` (if
     given) in float32, then grouped and rotated.
@@ -99,7 +101,7 @@ def quantize_tensor(
     groups = to_groups(weight, scheme.group_size)
     if scheme.rotation_seed is not None:
         groups = groups @ random_rotation(scheme.group_size, scheme.rotation_seed)
-    grid = fit_grid(groups, scheme.bits, storage=SCALE_DTYPE)
+    grid = fit_grid(groups, scheme.bits, storage=getattr(torch, scheme.grid_storage))
     return grid, quantize_children(groups, grid, scheme.num_children, scheme.phase)
 
 
@@ -125,11 +127,11 @@ def _checked_scales(
     return checked
 
 
-def _encode(name: str, codes: Tensor, grid: Grid) -> dict[str, Tensor]:
+def _encode(name: str, codes: Tensor, grid: Grid, storage: torch.dtype) -> dict[str, Tensor]:
     return {
         f"{name}/codes": pack(codes, grid.bits),
-        f"{name}/minimum": grid.minimum.reshape(-1).to(SCALE_DTYPE),
-        f"{name}/step": grid.step.reshape(-1).to(SCALE_DTYPE),
+        f"{name}/minimum": grid.minimum.reshape(-1).to(storage),
+        f"{name}/step": grid.step.reshape(-1).to(storage),
     }
 
 

@@ -1,4 +1,5 @@
 import copy
+import dataclasses
 import json
 import threading
 from pathlib import Path
@@ -137,3 +138,15 @@ def test_the_live_configs_load(size):
     config = LiveConfig.load(Path(f"configs/live-{size}.toml"))
     assert config.name == f"live-{size}" and config.lan == (0.0002, 1e9)
     assert (config.bits, config.group_size, config.die_after) == (3, 64, 32)
+
+
+def test_a_set_written_with_another_scheme_is_written_again(tiny_model, tmp_path):
+    # The first 4B sets stored grids in fp16; preparing again must replace them.
+    config = LiveConfig.load(Path("configs/live-4b.toml"))
+    live = run.live_scheme(3, 4, config)
+    assert live.grid_storage == "float32" and live.scaling and live.group_size == 64
+    scheme = dataclasses.replace(live, group_size=32)  # the tiny model has 32-wide weights
+    write_set(tiny_model, scheme, tmp_path)
+    assert run._written(tmp_path, scheme)
+    assert not run._written(tmp_path, dataclasses.replace(scheme, grid_storage="float16"))
+    assert not run._written(tmp_path / "missing", scheme)

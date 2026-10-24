@@ -14,7 +14,7 @@ from typing import Any
 
 import torch
 
-from syncytium.live.run import SCENARIOS, LiveConfig, problems
+from syncytium.live.run import REFERENCE_NAME, SCENARIOS, LiveConfig, problems
 from syncytium.models import load_model, load_tokenizer
 from syncytium.shards import MANIFEST_NAME, Manifest, rebuild_from_files, shard_name
 from syncytium.speed.network import Network, leader_reduce_seconds
@@ -41,7 +41,7 @@ def write_reference(config: LiveConfig, device: str = "cuda") -> Path:
         with torch.no_grad():
             logits = model(input_ids=ids).logits[0].float().cpu()
         prompts.append({"top1": logits.argmax(dim=-1).tolist(), "tail": logits[-TAIL:]})
-    path = config.output / "reference.pt"
+    path = config.output / REFERENCE_NAME
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"prompts": prompts}, path)
     return path
@@ -240,7 +240,7 @@ def check_run(
 
 def write_checks(config: LiveConfig) -> dict[str, Any]:
     """Check every run in the output directory; write ``checks.json`` and the timelines."""
-    path = config.output / "reference.pt"
+    path = config.output / REFERENCE_NAME
     reference = torch.load(path, weights_only=False) if path.exists() else None
     runs = {}
     for directory in sorted(d for d in config.output.iterdir() if (d / "pipeline").is_dir()):

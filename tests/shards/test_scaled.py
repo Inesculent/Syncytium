@@ -324,3 +324,27 @@ def test_shard_command_line_without_scaling_writes_no_scales(fake_sources, tmp_p
     main(["tiny", "--out", str(tmp_path), "--group-size", "32"])
     assert not (tmp_path / SCALES_NAME).exists()
     assert "split" not in fake_sources
+
+
+def test_scales_too_wide_for_fp16_grids_need_float32_ones(tmp_path):
+    # Channel scales as wide as 4B's (1e-7 to 1e7) push scaled weights past fp16's range.
+    weight = torch.randn(64, 128, generator=torch.Generator().manual_seed(0)) * 0.02
+    name = "model.layers.0.mlp.up_proj.weight"
+    scales = {name: torch.logspace(-7, 7, 128)}
+    with pytest.raises(ValueError, match="overflows float16"):
+        write_children({name: weight}, {}, scaled_scheme(0), "tiny", tmp_path / "half", scales)
+
+    scheme = Scheme(3, 32, 4, 0.5, 0, scaling=True, grid_storage="float32")
+    manifest = write_children({name: weight}, {}, scheme, "tiny", tmp_path / "full", scales)
+    shards = {k: tmp_path / "full" / shard_name(k) for k in range(4)}
+    rebuilt = rebuild_from_files(shards, manifest)[name]
+    assert torch.isfinite(rebuilt).all()
+    assert load_file(shards[0])[f"{name}/step"].dtype == torch.float32
+    # And it is the simulation's rebuild, which fits its grids in float32 too.
+    expected = simulate_rebuild(weight, scheme, range(4), scales=scales[name])
+    torch.testing.assert_close(rebuilt, expected, rtol=1e-5, atol=0)
+
+
+def test_grid_storage_must_be_a_known_dtype():
+    with pytest.raises(ValueError, match="grid_storage"):
+        Scheme(3, 32, 4, grid_storage="bfloat16")

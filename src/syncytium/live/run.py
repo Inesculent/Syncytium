@@ -51,6 +51,7 @@ ROLES = {0: 0, 1: 1, 2: 0, 3: 1}  # the baseline's stage on each device
 SYSTEMS = ("swarm", "pipeline")
 NETWORKS = ("cluster", "lan")
 VICTIM_WAIT = 60.0  # seconds to wait for E1's victim to be found dead after its request
+REFERENCE_NAME = "reference.pt"  # the simulation's probe logits, for check (a)
 
 # Each step: (label, action, devices). The labels are the pre-registration's.
 SCENARIOS: dict[str, tuple[tuple[str, str, tuple[int, ...]], ...]] = {
@@ -160,27 +161,44 @@ def prepare(config: LiveConfig, device: str = "cuda") -> None:
     Every step whose output is already complete is skipped, so an interrupted preparation
     resumes where it stopped.
     """
-    if not _written(config.children, DEVICES):
-        scheme = Scheme(config.bits, config.group_size, DEVICES, 0.5, config.rotation_seed, True)
-        shard_model(config.model, scheme, config.children, device)
+    children = live_scheme(config.bits, DEVICES, config)
+    if not _written(config.children, children):
+        shard_model(config.model, children, config.children, device)
+        # Everything made from the old set is stale.
+        for kind in Redundancy:
+            (config.children / regrowth_manifest_name(kind)).unlink(missing_ok=True)
+        (config.output / REFERENCE_NAME).unlink(missing_ok=True)
     if not (config.children / regrowth_manifest_name(Redundancy.NEIGHBOUR)).exists():
         write_regrowth(config.children, Redundancy.NEIGHBOUR)
     if not (config.children / regrowth_manifest_name(Redundancy.RESIDUE)).exists():
         write_regrowth(config.children, Redundancy.RESIDUE, config.residue_losses)
-    if not _written(config.baseline, 1):
-        rtn = Scheme(config.baseline_bits, config.group_size, 1, 0.5, config.rotation_seed, True)
-        shard_model(config.model, rtn, config.baseline, device)
+    baseline = live_scheme(config.baseline_bits, 1, config)
+    if not _written(config.baseline, baseline):
+        shard_model(config.model, baseline, config.baseline, device)
+        (config.baseline / STAGES_NAME).unlink(missing_ok=True)
     if not (config.baseline / STAGES_NAME).exists():
         write_stages(config.baseline, 2)
 
 
-def _written(directory: Path, children: int) -> bool:
-    """Whether a shard set with every child matching its manifest is in ``directory``."""
+def live_scheme(bits: int, children: int, config: "LiveConfig") -> Scheme:
+    """The scheme of a live shard set: Gate A's, with its grids stored in float32.
+
+    Gate A fits grids in float32. In fp16, 4B's channel scales overflow them (see
+    ``docs/preregistration-demo.md``, "Changes after fixing").
+    """
+    seed = config.rotation_seed
+    return Scheme(bits, config.group_size, children, 0.5, seed, True, "float32")
+
+
+def _written(directory: Path, scheme: Scheme) -> bool:
+    """Whether a set of ``scheme``, with every child matching its manifest, is in ``directory``."""
     if not (directory / MANIFEST_NAME).exists():
         return False
     manifest = Manifest.load(directory / MANIFEST_NAME)
+    if manifest.scheme != scheme:
+        return False
     try:
-        for k in range(children):
+        for k in range(scheme.num_children):
             verify_shard(directory / shard_name(k), manifest, k)
     except (ShardError, FileNotFoundError):
         return False
@@ -439,7 +457,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     config = LiveConfig.load(args.config)
     if args.command == "prepare":
         prepare(config, args.device)
-    elif args.command == "reference" and not (config.output / "reference.pt").exists():
+    elif args.command == "reference" and not (config.output / REFERENCE_NAME).exists():
         from syncytium.live.checks import write_reference
 
         write_reference(config, args.device)

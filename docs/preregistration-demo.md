@@ -229,3 +229,20 @@ threshold.
 - *Separately, every model in that run gave NaN logits:* the live members, the baseline's
   stages and the simulation reference alike. The development tool `syncytium.live.diagnose`
   finds where the NaN first appears. No 4B number is usable until this is found.
+
+**2026-10-24: the shard sets store their grids in float32.** `syncytium.live.diagnose`
+found where the second 4B run's NaN came from. The 4B channel scales run from 1.3e-7 to 7.7e6,
+compared with 0.1 to 9.5 at 0.8B. Scaled weights then pass fp16's range, so the fp16 grids of
+several MLP `up_proj` weights stored infinities. The same happened in both the children and the
+6-bit baseline. Gate A fits its grids in float32 and never stores them, so it was not affected,
+and neither is any earlier result. No 4B or 9B live number existed before this change, and no
+threshold changes.
+- *Grids in float32.* Every live set stores each group's minimum and step in float32, so its
+  children are Gate A's children. This adds 0.5 bits per weight. A 9B child becomes about
+  4.5 GB instead of 3.9 GB, and a baseline stage about 3.9 GB instead of 3.64 GB. Both stay
+  under the 8 GB cap.
+- *An fp16 set that does not fit is refused.* Writing a set with fp16 grids now fails if any
+  grid overflows fp16, instead of storing infinities.
+- *Old sets are replaced.* `prepare` rewrites any set whose manifest has another scheme. It
+  also removes everything made from the old set: the regrowth data, the stage index and the
+  simulation reference.

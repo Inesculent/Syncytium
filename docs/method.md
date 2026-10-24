@@ -65,7 +65,10 @@ Each child is one safetensors file:
 - The shared per-group minimum *m* and step Δ in fp16 (identical in every child). When a grid
   is stored, *m* is rounded down and Δ up to the nearest fp16 values, so every code still fits
   in *b* bits and the rebuild stays exact. Δ grows by at most about 0.1%; phase 1 simulations
-  use the unrounded float32 grid.
+  use the unrounded float32 grid. A scheme can store the grid in float32 instead. Channel
+  scales can push scaled weights past fp16's range, and the live demo's sets need float32 for
+  that reason. At 4B, scales run from about 1e-7 to 1e7. Storing the grid in float32 costs
+  0.5 bits more per weight at *g* = 64.
 - Every tensor that is not quantized (norms, Gated DeltaNet convolution and decay parameters),
   unchanged.
 
