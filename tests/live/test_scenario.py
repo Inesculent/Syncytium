@@ -156,6 +156,34 @@ def test_a_probe_survives_members_too_slow_for_the_leader(swarm, monkeypatch):
     assert sorted(left) == [(0, 2), (0, 3), (1, 2), (1, 3)]
 
 
+def test_a_device_taken_for_dead_is_made_to_stop(swarm):
+    # A device whose heartbeats were only late still runs; the controller makes it stop, so it
+    # can never serve beside the device that replaces it.
+    swarm.start(0, 1, 2, 3)
+    swarm.controller.admit([0, 1, 2, 3])
+    with swarm.controller._lock:
+        swarm.controller.devices[2].alive = False
+    swarm.threads[2].join(timeout=10)
+    assert not swarm.threads[2].is_alive()
+    assert [e["device"] for e in swarm.events() if e["event"] == "fenced"] == [2]
+    assert swarm.controller.live() == [0, 1, 3]
+
+
+def test_regrowth_counts_every_child_without_a_live_device(swarm):
+    # Device 3 is down when device 0 is replaced. Children 0 and 3 are both missing and are
+    # neighbours, so neighbour bits must be refused even though only 0 is being regrown.
+    controller = swarm.controller
+    swarm.start(0, 1, 2, 3)
+    controller.admit([0, 1, 2, 3])
+    controller.kill([3])
+    controller.kill([0], destroy=True)
+    swarm.start(0)
+    report = controller.regrow([0])
+    assert report["kind"] == "residue" and report["admitted"] == {0: True}
+    refused = [e for e in swarm.events() if e["event"] == "regrowth-refused"]
+    assert [(e["kind"], e["lost"]) for e in refused] == [("neighbour", [0, 3])]
+
+
 def test_adjacent_losses_refuse_neighbour_bits_and_regrow_from_the_residue(swarm):
     controller = swarm.controller
     swarm.start(0, 1, 2, 3)

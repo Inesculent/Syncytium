@@ -127,25 +127,30 @@ class Controller(Control):
     def regrow(self, lost: Sequence[int]) -> dict[str, Any]:
         """Regrow the children of ``lost`` on the new devices registered under their indices.
 
+        The loss to rebuild is every child without a live device, not only ``lost``: a member
+        that is down for any other reason is missing from the survivors' files too. Each new
+        device rebuilds them all and keeps its own.
+
         Raises:
             ShardError: If no regrowth data the set holds can rebuild this loss.
         """
         lost = sorted(lost)
-        kind = self._regrowth_kind(lost)
         survivors = [k for k in self.live() if k not in lost]
+        missing = [k for k in range(self.manifest.scheme.num_children) if k not in survivors]
+        kind = self._regrowth_kind(missing)
         common = [MANIFEST_NAME, *(regrowth_manifest_name(k) for k in self.sidecars)]
         common += [SCALES_NAME] if self.manifest.scales_sha256 else []
         files = {k: [shard_name(k), regrowth_name(kind, k)] for k in survivors}
         files[survivors[0]] += common
         info = {
-            "lost": lost,
+            "lost": missing,
             "kind": str(kind),
             "restore": [str(k) for k in self.sidecars if k is not kind],
             "files": {str(k): names for k, names in files.items()},
             "sources": {str(k): list(self.devices[k].address) for k in survivors},
             "common": common,
         }
-        self.log("regrowing", lost=lost, kind=str(kind), survivors=survivors)
+        self.log("regrowing", lost=lost, missing=missing, kind=str(kind), survivors=survivors)
         requests = {k: self._command(k, "regrow", info) for k in lost}
         report = {"kind": str(kind), "survivors": survivors, "devices": {}}
         for k, request in requests.items():

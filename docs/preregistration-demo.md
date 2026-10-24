@@ -213,3 +213,19 @@ request was served. Development runs are not results, and nothing here changes a
   faster. Before, it allowed nothing on the cluster network.
 - *Checks (a) and (b) need the full group.* A probe reports whether every prompt finished with
   every member it started with, and (a) and (b) fail if it did not.
+
+**2026-10-23, after the second 4B development run: heartbeats, fencing and regrowth.** The
+second run reached the end of scenario A but showed three faults. Nothing here changes a
+threshold.
+- *Heartbeats waited behind data.* A device's messages to every peer shared one lock, so a
+  heartbeat waited while the device sent a probe's logits to the leader. Devices on the other
+  node went silent for more than 2 s and were taken for dead while still running. Each
+  connection now has its own lock.
+- *A device taken for dead is made to stop.* If the controller hears from a device it took for
+  dead, or from a process that has since been replaced, it tells that process to crash, and
+  logs the fencing. So no process can keep running beside its replacement.
+- *Regrowth counts every missing child.* The loss checked, and rebuilt, is every child without
+  a live device, not only the ones being replaced.
+- *Separately, every model in that run gave NaN logits:* the live members, the baseline's
+  stages and the simulation reference alike. The development tool `syncytium.live.diagnose`
+  finds where the NaN first appears. No 4B number is usable until this is found.

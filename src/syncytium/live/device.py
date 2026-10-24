@@ -299,7 +299,7 @@ class Device:
 
     def _beat(self) -> None:
         while not self._stopped.is_set():
-            self._tell("beat", {"peak": self._peak()})
+            self._tell("beat", {"peak": self._peak(), "address": list(self.address)})
             self._stopped.wait(HEARTBEAT)
 
     def _answer(self, info: dict[str, Any], observe: Callable[[int], None] | None = None) -> Any:

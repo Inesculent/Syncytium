@@ -31,6 +31,10 @@ KINDS = (CONTRIB, RESULT, STATE, WANT)
 # Bits per second the real network is assumed to move at least. Waits allow for it on top of
 # any emulated link, so a large round (a probe's logits) is not taken for a dead member.
 NETWORK_FLOOR = 1e9
+# A new leader waits this many patiences for every member's state: members it never heard from
+# may still be waiting out the old leader for up to one. A member that sent its state waits
+# longer still, for the collection and the round that follows it.
+COLLECTING, AFTER_STATE = 2, 3
 
 
 class DroppedError(Exception):
@@ -100,10 +104,11 @@ class Exchange:
         self._results.pop(r - 3, None)
         return result.to(x.device)
 
-    def _lead(self, r: int, local: Tensor) -> Tensor:
+    def _lead(self, r: int, local: Tensor, dropped: Sequence[int] = ()) -> Tensor:
+        """Lead round ``r``; members in ``dropped`` are told with its result that they were."""
         contributions = {self.me: local, **self._buffer.pop(r, {})}
         # Members dropped this round still get its result, which tells them they were.
-        targets = [m for m in self.members if m != self.me]
+        targets = [m for m in self.members if m != self.me] + list(dropped)
         deadline = time.monotonic() + self.timeout + self._slack
         for member in [m for m in self.members if m not in contributions]:
             message = self._take(CONTRIB, member, deadline - time.monotonic(), r)
@@ -117,23 +122,23 @@ class Exchange:
 
     def _follow(self, r: int, local: Tensor) -> Tensor:
         sent = self._send(self.leader, Message(CONTRIB, self.me, r, tensor=local))
-        result = self._await_result(r) if sent else None
+        result = self._await_result(r, self._patience) if sent else None
         while result is None:
             self._drop(self.leader, r)
             if self.leader == self.me:
                 return self._take_over(r, local)
             sent = self._send(self.leader, Message(STATE, self.me, r, tensor=local))
-            result = self._await_result(r) if sent else None
+            result = self._await_result(r, AFTER_STATE * self._patience) if sent else None
         return result
 
-    def _await_result(self, r: int) -> Tensor | None:
-        """Wait for round ``r``'s result from the leader, answering its requests meanwhile.
+    def _await_result(self, r: int, patience: float) -> Tensor | None:
+        """Wait up to ``patience`` for round ``r``'s result, answering the leader's requests.
 
         Raises:
             DroppedError: If the result's members leave this one out.
         """
         leader = self.leader
-        deadline = time.monotonic() + self._patience
+        deadline = time.monotonic() + patience
         while (left := deadline - time.monotonic()) > 0:
             message = self.endpoint.inbox.take(
                 lambda msg: msg.sender == leader and msg.kind in (RESULT, WANT) and self._ours(msg),
@@ -156,23 +161,25 @@ class Exchange:
     def _take_over(self, p: int, local: Tensor) -> Tensor:
         """Become leader while waiting for round ``p``'s result; reconcile and continue."""
         self._log("leader", p, self.me)
+        others = [m for m in self.members if m != self.me]
         states = self._collect_states()
+        silent = [m for m in others if m not in states]
         ahead = [m for m, s in states.items() if s.round == p + 1]
         behind = [m for m, s in states.items() if s.round == p - 1]
         if ahead:
             result = self._fetch(ahead[0], p)
             laggards = [m for m, s in states.items() if s.round == p]
             self._buffer[p + 1] = {m: states[m].tensor for m in ahead}
-            self._broadcast(p, result, laggards)
+            self._broadcast(p, result, laggards + silent)
             return result
         if behind:
             self._broadcast(p - 1, self._results[p - 1], behind)
         self._buffer[p] = {m: s.tensor for m, s in states.items() if s.round == p}
-        return self._lead(p, local)
+        return self._lead(p, local, silent)
 
     def _collect_states(self) -> dict[int, Message]:
         states = {}
-        deadline = time.monotonic() + self._patience
+        deadline = time.monotonic() + COLLECTING * self._patience
         for member in [m for m in self.members if m != self.me]:
             message = self._take(STATE, member, deadline - time.monotonic())
             if message is None:

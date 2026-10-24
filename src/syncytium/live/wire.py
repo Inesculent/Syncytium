@@ -170,6 +170,7 @@ class Endpoint:
         self._server = socket.create_server((host, port))
         # Keyed by address too: a device that restarts listens somewhere new.
         self._peers: dict[tuple[int, tuple[str, int]], socket.socket] = {}
+        self._sending: dict[tuple[int, tuple[str, int]], threading.Lock] = {}
         self._lock = threading.Lock()
         self._link_lock = threading.Lock()
         self._sending_until = self._receiving_until = 0.0
@@ -192,12 +193,20 @@ class Endpoint:
                 done = self._sending_until
             time.sleep(max(done - time.monotonic(), 0.0))
         key = (peer, tuple(address))
+        # One lock per connection, so a large message to one peer never holds up a heartbeat
+        # to another.
+        with self._lock:
+            sending = self._sending.setdefault(key, threading.Lock())
         try:
-            with self._lock:
-                if key not in self._peers:
-                    self._peers[key] = socket.create_connection(address, timeout=5)
-                    self._peers[key].settimeout(None)
-                self._peers[key].sendall(data)
+            with sending:
+                with self._lock:
+                    sock = self._peers.get(key)
+                if sock is None:
+                    sock = socket.create_connection(address, timeout=5)
+                    sock.settimeout(None)
+                    with self._lock:
+                        self._peers[key] = sock
+                sock.sendall(data)
         except OSError:
             self._forget(key)
             return False

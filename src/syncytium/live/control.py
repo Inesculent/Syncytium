@@ -64,6 +64,7 @@ class Control:
         self._log_file = log.open("a", encoding="utf-8")
         self._lock = threading.Lock()
         self._stopped = threading.Event()
+        self._fenced: set[tuple[int, tuple[str, int]]] = set()
         threading.Thread(target=self._monitor, daemon=True).start()
 
     def expected_sha256(self, index: int) -> str:
@@ -108,12 +109,15 @@ class Control:
         Returns:
             Per device, seconds from the command to the controller taking it for dead.
         """
+        down = [k for k in indices if not self.devices[k].alive]
         for k in indices:
             with self._lock:
                 self.devices[k].killed_at = time.monotonic()
             self._command(k, "die", {"wipe": destroy})
-            self.log("destroyed" if destroy else "crashed", device=k)
-        detected = {k: self.await_death(k) for k in indices}
+            fields = {"already_down": True} if k in down else {}
+            self.log("destroyed" if destroy else "crashed", device=k, **fields)
+        # A device already taken for dead has no detection time to report.
+        detected = {k: self.await_death(k) for k in indices if k not in down}
         for k, seconds in detected.items():
             self.log("detected", device=k, seconds=seconds)
         return detected
@@ -216,15 +220,34 @@ class Control:
                 self.devices[k] = DeviceState(tuple(message.info["address"]), now)
             self.log("registered", device=k, has_model=message.info["has_model"])
             return
+        address = tuple(message.info["address"])
         with self._lock:
             device = self.devices.get(k)
-            if device is None or not device.alive:
+            if device is None:
                 return
-            device.last_beat = now
+            stale = not device.alive or address != device.address
+            if not stale:
+                device.last_beat = now
+        if stale:
+            self._fence(k, address)
+            return
+        with self._lock:
             higher = message.info["peak"] > device.peak
             device.peak = max(device.peak, message.info["peak"])
         if higher:
             self.log("peak", device=k, bytes=message.info["peak"])
+
+    def _fence(self, index: int, address: tuple[str, int]) -> None:
+        """Make a process the controller has given up on, or replaced, really stop.
+
+        A device taken for dead stays dead: one that was only slow to send its heartbeats
+        would otherwise keep running beside its replacement.
+        """
+        message = Message("die", CONTROLLER, info={"wipe": False, "request": -1})
+        self.endpoint.send(index, address, message)
+        if (index, address) not in self._fenced:
+            self._fenced.add((index, address))
+            self.log("fenced", device=index, address=list(address))
 
     def _check_silence(self) -> None:
         now, dead = time.monotonic(), []

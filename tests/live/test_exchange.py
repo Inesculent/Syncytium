@@ -1,3 +1,4 @@
+import socket
 import threading
 import time
 
@@ -109,6 +110,24 @@ def test_a_new_leader_can_take_over_in_the_first_round():
     assert_consistent(results, [1, 2, 3])
     assert torch.equal(results[1][1], mean_in_order({m: value(m, 1) for m in (1, 2, 3)}))
     assert exchanges[1].members == [1, 2, 3]
+
+
+class SlowState(Exchange):
+    """Members contribute once the leader is surely down; member 2 sends its state late."""
+
+    def _send(self, member, message):
+        if message.kind == "contrib" and message.round == 1:
+            time.sleep(0.2)  # member 0 crashes at once, so every contribution is refused
+        if self.me == 2 and message.kind == "state":
+            time.sleep(1.5 * self._patience)  # later than one patience after the takeover
+        return super()._send(member, message)
+
+
+def test_a_new_leader_waits_for_a_member_slow_to_send_its_state():
+    results, exchanges = run([0, 1, 2, 3], crash={0: 1}, exchange_type=SlowState)
+    assert_consistent(results, [1, 2, 3])
+    assert torch.equal(results[2][1], mean_in_order({m: value(m, 1) for m in (1, 2, 3)}))
+    assert exchanges[2].members == [1, 2, 3]
 
 
 class SlowMember(Exchange):
@@ -230,3 +249,18 @@ def test_direct_peers_skip_the_emulated_link():
     assert receiver.inbox.take(lambda m: m.kind == "bulk", 1) is None
     for endpoint in (sender, receiver):
         endpoint.close()
+
+
+def test_a_large_send_to_one_peer_does_not_hold_up_another():
+    # A peer that accepts the connection but never reads, so a large send to it stays blocked.
+    stuck = socket.create_server(("127.0.0.1", 0))
+    sender, other = (Endpoint(k, host="127.0.0.1") for k in (1, 2))
+    bulk = Message("bulk", 1, tensor=torch.zeros(64_000_000, dtype=torch.uint8))
+    threading.Thread(target=sender.send, args=(3, stuck.getsockname(), bulk), daemon=True).start()
+    time.sleep(0.3)
+    start = time.monotonic()
+    assert sender.send(2, ("127.0.0.1", other._server.getsockname()[1]), Message("beat", 1))
+    assert other.inbox.take(lambda m: m.kind == "beat", 2) is not None
+    assert time.monotonic() - start < 1
+    for closing in (sender, other, stuck):
+        closing.close()
